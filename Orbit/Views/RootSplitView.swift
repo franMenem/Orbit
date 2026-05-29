@@ -10,6 +10,7 @@ import SwiftUI
 /// Phase 4 adds: AppActions (same pattern)
 struct RootSplitView: View {
     @State private var selection = Selection()
+    @State private var filterState = FilterState()  // Phase 3 — same pattern as selection
 
     var body: some View {
         NavigationSplitView {
@@ -21,6 +22,7 @@ struct RootSplitView: View {
             IssueDetailView()
         }
         .environment(selection)
+        .environment(filterState)   // Phase 3
     }
 }
 

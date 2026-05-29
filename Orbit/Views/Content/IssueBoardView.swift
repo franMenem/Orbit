@@ -1,16 +1,15 @@
 import SwiftUI
 import SwiftData
 
-/// Kanban board with one column per IssueStatus.
-/// Issues are grouped in Swift from project.unwrappedIssues — no relationship predicates.
-/// DnD: draggable payload = issue.id.uuidString (String); drop sets issue.status.
+/// Kanban board. Receives a pre-filtered [Issue] from ContentPaneView; groups by status in Swift.
+/// DnD: payload = issue.id.uuidString; drop handler looks up via context.fetch (scalar predicate only).
 struct IssueBoardView: View {
-    let project: Project
+    let issues: [Issue]
     @Environment(Selection.self) private var selection
     @Environment(\.modelContext) private var context
 
     private var issuesByStatus: [IssueStatus: [Issue]] {
-        Dictionary(grouping: project.unwrappedIssues, by: \.status)
+        Dictionary(grouping: issues, by: \.status)
     }
 
     private var orderedStatuses: [IssueStatus] {
@@ -23,7 +22,7 @@ struct IssueBoardView: View {
                 ForEach(orderedStatuses, id: \.self) { status in
                     BoardColumn(
                         status: status,
-                        issues: (issuesByStatus[status] ?? []).sorted { $0.createdAt > $1.createdAt },
+                        issues: issuesByStatus[status] ?? [],
                         selectedIssue: selection.selectedIssue,
                         onSelect: { selection.selectedIssue = $0 },
                         onDrop: { handleDrop(uuidString: $0, to: status) }
@@ -35,10 +34,11 @@ struct IssueBoardView: View {
     }
 
     private func handleDrop(uuidString: String, to targetStatus: IssueStatus) -> Bool {
-        guard let uuid = UUID(uuidString: uuidString),
-              let issue = project.unwrappedIssues.first(where: { $0.id == uuid }),
-              issue.status != targetStatus
-        else { return false }
+        guard let uuid = UUID(uuidString: uuidString) else { return false }
+        // Scalar predicate on own field — no to-many traversal, CloudKit-safe.
+        let descriptor = FetchDescriptor<Issue>(predicate: #Predicate<Issue> { $0.id == uuid })
+        guard let issue = (try? context.fetch(descriptor))?.first,
+              issue.status != targetStatus else { return false }
         issue.status = targetStatus
         issue.updatedAt = .now
         try? context.save()
@@ -52,7 +52,6 @@ private struct BoardColumn: View {
     let selectedIssue: Issue?
     let onSelect: (Issue) -> Void
     let onDrop: (String) -> Bool
-
     @State private var isTargeted = false
 
     var body: some View {

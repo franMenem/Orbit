@@ -1,30 +1,24 @@
 import SwiftUI
 import SwiftData
 
-/// List of issues scoped to the selected project, filtered and sorted in Swift.
-/// Approach: reads project.unwrappedIssues directly (no @Query with parameterized predicate)
-/// — consistent with Phase 3 in-memory filtering and avoids the @Query-init-once pitfall.
+/// List of issues. Receives a pre-filtered, pre-sorted [Issue] from ContentPaneView.
 struct IssueListView: View {
-    let project: Project
+    let issues: [Issue]
     @Environment(Selection.self) private var selection
     @Environment(\.modelContext) private var context
-
-    private var sortedIssues: [Issue] {
-        project.unwrappedIssues.sorted { $0.createdAt > $1.createdAt }
-    }
 
     var body: some View {
         @Bindable var sel = selection
         Group {
-            if sortedIssues.isEmpty {
+            if issues.isEmpty {
                 ContentUnavailableView(
                     "No Issues",
                     systemImage: "tray",
-                    description: Text("Press + or ⌘N to create your first issue.")
+                    description: Text("Press + to create an issue, or clear your filters.")
                 )
             } else {
                 List(selection: $sel.selectedIssue) {
-                    ForEach(sortedIssues) { issue in
+                    ForEach(issues) { issue in
                         IssueRow(issue: issue)
                             .tag(issue)
                             .contextMenu {

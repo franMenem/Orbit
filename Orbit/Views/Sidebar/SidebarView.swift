@@ -14,7 +14,9 @@ struct SidebarView: View {
                 WorkspaceRow(workspace: workspace)
             }
 
-            // TODO(Phase 3): Saved Views section here — replaced in plan 03-02
+            ForEach(workspaces) { workspace in
+                    SavedViewsSection(workspace: workspace)
+                }
         }
         .navigationTitle("Orbit")
         .sheet(item: $labelManagerWorkspace) { ws in
