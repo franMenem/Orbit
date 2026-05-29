@@ -77,7 +77,9 @@ private struct IssueEditorView: View {
                 }
             }
 
-            // TODO(Phase 3): Labels chip row here
+            Section("Labels") {
+                LabelsRow(issue: issue)
+            }
 
             Section {
                 VStack(alignment: .leading, spacing: 2) {
@@ -95,5 +97,67 @@ private struct IssueEditorView: View {
     private func save() {
         issue.updatedAt = .now
         try? context.save()
+    }
+}
+
+private struct LabelsRow: View {
+    @Bindable var issue: Issue
+    @State private var showPicker = false
+
+    var workspace: Workspace? { issue.project?.workspace }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            FlowLayout(spacing: 4) {
+                ForEach(issue.unwrappedLabels) { label in
+                    LabelChip(name: label.name, colorHex: label.colorHex) {
+                        // remove on ×
+                        issue.labels?.removeAll { $0.persistentModelID == label.persistentModelID }
+                        label.issues?.removeAll { $0.persistentModelID == issue.persistentModelID }
+                    }
+                }
+                Button {
+                    showPicker = true
+                } label: {
+                    SwiftUI.Label("Add", systemImage: "plus")
+                        .font(.caption2)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            }
+        }
+        .sheet(isPresented: $showPicker) {
+            if let ws = workspace {
+                LabelPickerView(issue: issue, workspace: ws)
+            }
+        }
+    }
+}
+
+/// Simple flow layout for chips.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 300
+        var x: CGFloat = 0; var y: CGFloat = 0; var rowH: CGFloat = 0
+        for sub in subviews {
+            let size = sub.sizeThatFits(.unspecified)
+            if x + size.width > width && x > 0 { y += rowH + spacing; x = 0; rowH = 0 }
+            x += size.width + spacing
+            rowH = max(rowH, size.height)
+        }
+        return CGSize(width: width, height: y + rowH)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX; var y = bounds.minY; var rowH: CGFloat = 0
+        for sub in subviews {
+            let size = sub.sizeThatFits(.unspecified)
+            if x + size.width > bounds.maxX && x > bounds.minX { y += rowH + spacing; x = bounds.minX; rowH = 0 }
+            sub.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowH = max(rowH, size.height)
+        }
     }
 }

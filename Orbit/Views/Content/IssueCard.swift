@@ -21,7 +21,9 @@ struct IssueCard: View {
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
-                // TODO(Phase 3): label chips here
+                ForEach(issue.unwrappedLabels.prefix(2)) { label in
+                        LabelChip(name: label.name, colorHex: label.colorHex)
+                    }
             }
         }
         .padding(10)

@@ -5,6 +5,7 @@ struct SidebarView: View {
     @Environment(Selection.self) private var selection
     @Environment(\.modelContext) private var context
     @Query(sort: \Workspace.createdAt) private var workspaces: [Workspace]
+    @State private var labelManagerWorkspace: Workspace?
 
     var body: some View {
         @Bindable var sel = selection
@@ -13,9 +14,12 @@ struct SidebarView: View {
                 WorkspaceRow(workspace: workspace)
             }
 
-            // TODO(Phase 3): Saved Views section here
+            // TODO(Phase 3): Saved Views section here — replaced in plan 03-02
         }
         .navigationTitle("Orbit")
+        .sheet(item: $labelManagerWorkspace) { ws in
+            LabelManagerView(workspace: ws)
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -25,6 +29,12 @@ struct SidebarView: View {
                         ForEach(workspaces) { workspace in
                             Button("New Project in \(workspace.name)") {
                                 addProject(to: workspace)
+                            }
+                        }
+                        Divider()
+                        ForEach(workspaces) { workspace in
+                            Button("Manage Labels in \(workspace.name)") {
+                                labelManagerWorkspace = workspace
                             }
                         }
                     }
