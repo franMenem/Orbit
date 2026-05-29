@@ -16,8 +16,7 @@ struct RootSplitView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 300)
         } content: {
-            // Replaced by ContentPaneView in plan 02-02
-            ContentPanePlaceholder()
+            ContentPaneView()
         } detail: {
             IssueDetailView()
         }
@@ -25,23 +24,3 @@ struct RootSplitView: View {
     }
 }
 
-/// Temporary placeholder — replaced by ContentPaneView in plan 02-02.
-private struct ContentPanePlaceholder: View {
-    @Environment(Selection.self) private var selection
-
-    var body: some View {
-        if let project = selection.selectedProject {
-            ContentUnavailableView(
-                project.name,
-                systemImage: "folder",
-                description: Text("\(project.unwrappedIssues.count) issue(s) — list/board coming in plan 02-02")
-            )
-        } else {
-            ContentUnavailableView(
-                "No Project Selected",
-                systemImage: "folder.badge.questionmark",
-                description: Text("Choose a project from the sidebar.")
-            )
-        }
-    }
-}
