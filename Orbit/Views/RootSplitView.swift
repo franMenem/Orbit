@@ -17,7 +17,9 @@ struct RootSplitView: View {
             }
             NavigationSplitView {
                 SidebarView()
+                #if os(macOS)
                     .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 300)
+                #endif
             } content: {
                 ContentPaneView()
             } detail: {
@@ -28,7 +30,9 @@ struct RootSplitView: View {
         .environment(filterState)
         .sheet(isPresented: $actions.showCommandPalette) {
             CommandPaletteView()
+            #if os(macOS)
                 .frame(width: 600, height: 400)
+            #endif
         }
     }
 }
