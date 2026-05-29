@@ -10,15 +10,11 @@ struct OrbitApp: App {
             RootSplitView()
                 .environment(appActions)
         }
-        .modelContainer(for: [
-            Workspace.self,
-            Project.self,
-            Issue.self,
-            Label.self,
-            SavedView.self,
-        ])
+        .modelContainer(ContainerFactory.make())
+        #if os(macOS)
         .commands {
             OrbitCommands(actions: appActions)
         }
+        #endif
     }
 }

@@ -1,3 +1,4 @@
+#if os(macOS)
 import SwiftUI
 
 struct OrbitCommands: Commands {
@@ -47,3 +48,4 @@ struct OrbitCommands: Commands {
         }
     }
 }
+#endif
