@@ -13,10 +13,9 @@ struct SidebarView: View {
             ForEach(workspaces) { workspace in
                 WorkspaceRow(workspace: workspace)
             }
-
             ForEach(workspaces) { workspace in
-                    SavedViewsSection(workspace: workspace)
-                }
+                SavedViewsSection(workspace: workspace)
+            }
         }
         .navigationTitle("Orbit")
         .sheet(item: $labelManagerWorkspace) { ws in
@@ -64,15 +63,21 @@ struct SidebarView: View {
     }
 }
 
+// MARK: - WorkspaceRow
+
 private struct WorkspaceRow: View {
-    let workspace: Workspace
+    @Bindable var workspace: Workspace
+    @Environment(\.modelContext) private var context
+    @Environment(Selection.self) private var selection
     @State private var isExpanded = true
+    @State private var showRename = false
+    @State private var editName = ""
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             ForEach(workspace.unwrappedProjects) { project in
-                SwiftUI.Label(project.name, systemImage: "folder")
-                    .tag(project)
+                ProjectRow(project: project)
             }
             if workspace.unwrappedProjects.isEmpty {
                 Text("No projects")
@@ -83,5 +88,87 @@ private struct WorkspaceRow: View {
             SwiftUI.Label(workspace.name, systemImage: "briefcase")
                 .font(.headline)
         }
+        .contextMenu {
+            Button("Rename Workspace") {
+                editName = workspace.name
+                showRename = true
+            }
+            Divider()
+            Button("Delete Workspace", role: .destructive) {
+                showDeleteConfirm = true
+            }
+        }
+        .alert("Rename Workspace", isPresented: $showRename) {
+            TextField("Name", text: $editName)
+            Button("Rename") {
+                workspace.name = editName.trimmingCharacters(in: .whitespaces).isEmpty
+                    ? workspace.name : editName
+                try? context.save()
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .confirmationDialog(
+            "Delete workspace \"\(workspace.name)\" and all its projects and issues?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if workspace.unwrappedProjects.contains(where: {
+                    $0.persistentModelID == selection.selectedProject?.persistentModelID
+                }) {
+                    selection.selectedProject = nil
+                }
+                context.delete(workspace)
+                try? context.save()
+            }
+        }
+    }
+}
+
+// MARK: - ProjectRow
+
+private struct ProjectRow: View {
+    @Bindable var project: Project
+    @Environment(\.modelContext) private var context
+    @Environment(Selection.self) private var selection
+    @State private var showRename = false
+    @State private var editName = ""
+    @State private var showDeleteConfirm = false
+
+    var body: some View {
+        SwiftUI.Label(project.name, systemImage: "folder")
+            .tag(project)
+            .contextMenu {
+                Button("Rename Project") {
+                    editName = project.name
+                    showRename = true
+                }
+                Divider()
+                Button("Delete Project", role: .destructive) {
+                    showDeleteConfirm = true
+                }
+            }
+            .alert("Rename Project", isPresented: $showRename) {
+                TextField("Name", text: $editName)
+                Button("Rename") {
+                    project.name = editName.trimmingCharacters(in: .whitespaces).isEmpty
+                        ? project.name : editName
+                    try? context.save()
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .confirmationDialog(
+                "Delete project \"\(project.name)\" and all its issues?",
+                isPresented: $showDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete", role: .destructive) {
+                    if selection.selectedProject?.persistentModelID == project.persistentModelID {
+                        selection.selectedProject = nil
+                    }
+                    context.delete(project)
+                    try? context.save()
+                }
+            }
     }
 }
