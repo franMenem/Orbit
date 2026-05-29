@@ -1,0 +1,35 @@
+# Xcode / Swift — keeps GSD's "never git add ." discipline safe
+## Build / DerivedData
+DerivedData/
+build/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+## User-specific Xcode state
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+
+## Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+## macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+## CloudKit / provisioning (don't commit secrets or profiles)
+*.mobileprovision
+*.cer
+*.p12
+
+## Misc
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
