@@ -5,7 +5,7 @@ import SwiftData
 struct OrbitApp: App {
     var body: some Scene {
         WindowGroup {
-            DebugIssueListView()
+            RootSplitView()
         }
         .modelContainer(for: [
             Workspace.self,
