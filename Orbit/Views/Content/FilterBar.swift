@@ -4,9 +4,11 @@ import SwiftData
 struct FilterBar: View {
     @Environment(FilterState.self) private var filterState
     @Environment(Selection.self) private var selection
+    @Environment(AppActions.self) private var appActions
     @Environment(\.modelContext) private var context
     @State private var showSaveSheet = false
     @State private var savedViewName = ""
+    @FocusState private var isSearchFocused: Bool
 
     var activeWorkspace: Workspace? {
         selection.selectedProject?.workspace ?? selection.selectedSavedView?.workspace
@@ -116,6 +118,7 @@ struct FilterBar: View {
                         .textFieldStyle(.plain)
                         .font(.caption)
                         .frame(width: 140)
+                        .focused($isSearchFocused)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
@@ -140,6 +143,12 @@ struct FilterBar: View {
             .padding(.vertical, 6)
             .background(.bar)
             Divider()
+        }
+        .onChange(of: appActions.focusSearchSignal) {
+            if appActions.focusSearchSignal {
+                isSearchFocused = true
+                appActions.focusSearchSignal = false
+            }
         }
         .sheet(isPresented: $showSaveSheet) {
             SaveViewSheet(isPresented: $showSaveSheet, onSave: { name in

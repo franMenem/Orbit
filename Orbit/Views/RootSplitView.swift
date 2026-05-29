@@ -10,9 +10,11 @@ import SwiftUI
 /// Phase 4 adds: AppActions (same pattern)
 struct RootSplitView: View {
     @State private var selection = Selection()
-    @State private var filterState = FilterState()  // Phase 3 — same pattern as selection
+    @State private var filterState = FilterState()
+    @Environment(AppActions.self) private var appActions  // owned by OrbitApp
 
     var body: some View {
+        @Bindable var actions = appActions
         NavigationSplitView {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 300)
@@ -22,7 +24,11 @@ struct RootSplitView: View {
             IssueDetailView()
         }
         .environment(selection)
-        .environment(filterState)   // Phase 3
+        .environment(filterState)
+        .sheet(isPresented: $actions.showCommandPalette) {
+            CommandPaletteView()
+                .frame(width: 600, height: 400)
+        }
     }
 }
 

@@ -21,7 +21,9 @@ struct IssueDetailView: View {
 private struct IssueEditorView: View {
     @Bindable var issue: Issue
     @Environment(\.modelContext) private var context
+    @Environment(AppActions.self) private var appActions
     @State private var hasDueDate: Bool
+    @FocusState private var isTitleFocused: Bool
 
     init(issue: Issue) {
         self.issue = issue
@@ -33,6 +35,7 @@ private struct IssueEditorView: View {
             Section {
                 TextField("Title", text: $issue.title)
                     .font(.title3.weight(.semibold))
+                    .focused($isTitleFocused)
                     .onChange(of: issue.title) { save() }
             }
 
@@ -92,6 +95,12 @@ private struct IssueEditorView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(issue.title.isEmpty ? "Untitled Issue" : issue.title)
+        .onChange(of: appActions.focusNewIssueTitle) {
+            if appActions.focusNewIssueTitle {
+                isTitleFocused = true
+                appActions.focusNewIssueTitle = false
+            }
+        }
     }
 
     private func save() {

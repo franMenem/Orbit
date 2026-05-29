@@ -1,11 +1,13 @@
 import SwiftUI
 import SwiftData
 
-/// List of issues. Receives a pre-filtered, pre-sorted [Issue] from ContentPaneView.
+/// List of issues. Receives pre-filtered, pre-sorted [Issue] from ContentPaneView.
+/// Arrow-key navigation via List(selection:); ⌫/Delete with confirmationDialog.
 struct IssueListView: View {
     let issues: [Issue]
     @Environment(Selection.self) private var selection
     @Environment(\.modelContext) private var context
+    @State private var showDeleteConfirm = false
 
     var body: some View {
         @Bindable var sel = selection
@@ -14,7 +16,7 @@ struct IssueListView: View {
                 ContentUnavailableView(
                     "No Issues",
                     systemImage: "tray",
-                    description: Text("Press + to create an issue, or clear your filters.")
+                    description: Text("Press ⌘N to create an issue, or clear your filters.")
                 )
             } else {
                 List(selection: $sel.selectedIssue) {
@@ -23,16 +25,37 @@ struct IssueListView: View {
                             .tag(issue)
                             .contextMenu {
                                 Button("Delete", role: .destructive) {
-                                    if selection.selectedIssue?.persistentModelID == issue.persistentModelID {
-                                        selection.selectedIssue = nil
-                                    }
-                                    context.delete(issue)
-                                    try? context.save()
+                                    sel.selectedIssue = issue
+                                    showDeleteConfirm = true
                                 }
                             }
                     }
                 }
+                .onDeleteCommand {
+                    if selection.selectedIssue != nil { showDeleteConfirm = true }
+                }
             }
         }
+        .confirmationDialog(
+            "Delete \"\(selection.selectedIssue?.title.isEmpty == false ? selection.selectedIssue!.title : "Untitled")\"?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) { deleteSelected() }
+        } message: {
+            Text("This action cannot be undone.")
+        }
+    }
+
+    private func deleteSelected() {
+        guard let issue = selection.selectedIssue else { return }
+        selection.selectedIssue = nil
+        // Relationship cleanup: SwiftData cascade rules handle project.issues,
+        // but we manually clear label references since deleteRule is .nullify.
+        issue.labels?.forEach { label in
+            label.issues?.removeAll { $0.persistentModelID == issue.persistentModelID }
+        }
+        context.delete(issue)
+        try? context.save()
     }
 }

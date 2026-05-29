@@ -3,9 +3,12 @@ import SwiftData
 
 @main
 struct OrbitApp: App {
+    @State private var appActions = AppActions()
+
     var body: some Scene {
         WindowGroup {
             RootSplitView()
+                .environment(appActions)
         }
         .modelContainer(for: [
             Workspace.self,
@@ -14,5 +17,8 @@ struct OrbitApp: App {
             Label.self,
             SavedView.self,
         ])
+        .commands {
+            OrbitCommands(actions: appActions)
+        }
     }
 }
