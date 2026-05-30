@@ -148,6 +148,14 @@ enum ClipboardService {
             lines.append("")
         }
 
+        // Solution
+        if !issue.solution.isEmpty {
+            lines.append("## Solution")
+            lines.append("")
+            lines.append(issue.solution)
+            lines.append("")
+        }
+
         // Attachment list (just names; the bytes are on the pasteboard separately)
         let attachments = issue.attachments ?? []
         if !attachments.isEmpty {
