@@ -23,6 +23,7 @@ private struct IssueEditorView: View {
     @Environment(\.modelContext) private var context
     @Environment(AppActions.self) private var appActions
     @State private var hasDueDate: Bool
+    @State private var copyConfirmation: String? = nil
     @FocusState private var isTitleFocused: Bool
 
     init(issue: Issue) {
@@ -99,6 +100,47 @@ private struct IssueEditorView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(issue.title.isEmpty ? "Untitled Issue" : issue.title)
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        let r = ClipboardService.copyIssueForAI(issue)
+                        showConfirmation(r.summary)
+                    } label: {
+                        SwiftUI.Label("Copy for AI (text + files)", systemImage: "sparkles")
+                    }
+                    Button {
+                        _ = ClipboardService.copyIssueAsMarkdown(issue)
+                        showConfirmation("Copied markdown")
+                    } label: {
+                        SwiftUI.Label("Copy as Markdown only", systemImage: "doc.plaintext")
+                    }
+                } label: {
+                    SwiftUI.Label("Copy for AI", systemImage: "sparkles")
+                } primaryAction: {
+                    let r = ClipboardService.copyIssueForAI(issue)
+                    showConfirmation(r.summary)
+                }
+                .help("Copy this issue to the clipboard (⇧⌘C)")
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+            }
+        }
+        .overlay(alignment: .top) {
+            if let msg = copyConfirmation {
+                HStack(spacing: 6) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                    Text(msg).font(.caption.weight(.medium))
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.thinMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
+                .shadow(color: Color.black.opacity(0.15), radius: 6, y: 2)
+                .padding(.top, 12)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
         .onChange(of: appActions.focusNewIssueTitle) {
             if appActions.focusNewIssueTitle {
                 isTitleFocused = true
@@ -110,6 +152,13 @@ private struct IssueEditorView: View {
     private func save() {
         issue.updatedAt = .now
         try? context.save()
+    }
+
+    private func showConfirmation(_ message: String) {
+        withAnimation(.spring(duration: 0.25)) { copyConfirmation = message }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+            withAnimation(.easeOut(duration: 0.3)) { copyConfirmation = nil }
+        }
     }
 }
 
