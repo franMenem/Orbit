@@ -34,10 +34,39 @@ private struct IssueEditorView: View {
     var body: some View {
         Form {
             Section {
-                TextField("Title", text: $issue.title)
-                    .font(.title3.weight(.semibold))
-                    .focused($isTitleFocused)
-                    .onChange(of: issue.title) { save() }
+                HStack(alignment: .center, spacing: 8) {
+                    TextField("Title", text: $issue.title)
+                        .font(.title3.weight(.semibold))
+                        .focused($isTitleFocused)
+                        .onChange(of: issue.title) { save() }
+                        .textFieldStyle(.plain)
+
+                    Menu {
+                        Button {
+                            let r = ClipboardService.copyIssueForAI(issue)
+                            showConfirmation(r.summary)
+                        } label: {
+                            SwiftUI.Label("Copy for AI (text + files)", systemImage: "sparkles")
+                        }
+                        Button {
+                            _ = ClipboardService.copyIssueAsMarkdown(issue)
+                            showConfirmation("Copied markdown")
+                        } label: {
+                            SwiftUI.Label("Copy as Markdown only", systemImage: "doc.plaintext")
+                        }
+                    } label: {
+                        SwiftUI.Label("Copy for AI", systemImage: "sparkles")
+                            .font(.caption.weight(.medium))
+                    } primaryAction: {
+                        let r = ClipboardService.copyIssueForAI(issue)
+                        showConfirmation(r.summary)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.visible)
+                    .fixedSize()
+                    .help("Copy this issue to the clipboard (⇧⌘C)")
+                    .keyboardShortcut("c", modifiers: [.command, .shift])
+                }
             }
 
             Section("Details") {
@@ -100,31 +129,6 @@ private struct IssueEditorView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(issue.title.isEmpty ? "Untitled Issue" : issue.title)
-        .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Menu {
-                    Button {
-                        let r = ClipboardService.copyIssueForAI(issue)
-                        showConfirmation(r.summary)
-                    } label: {
-                        SwiftUI.Label("Copy for AI (text + files)", systemImage: "sparkles")
-                    }
-                    Button {
-                        _ = ClipboardService.copyIssueAsMarkdown(issue)
-                        showConfirmation("Copied markdown")
-                    } label: {
-                        SwiftUI.Label("Copy as Markdown only", systemImage: "doc.plaintext")
-                    }
-                } label: {
-                    SwiftUI.Label("Copy for AI", systemImage: "sparkles")
-                } primaryAction: {
-                    let r = ClipboardService.copyIssueForAI(issue)
-                    showConfirmation(r.summary)
-                }
-                .help("Copy this issue to the clipboard (⇧⌘C)")
-                .keyboardShortcut("c", modifiers: [.command, .shift])
-            }
-        }
         .overlay(alignment: .top) {
             if let msg = copyConfirmation {
                 HStack(spacing: 6) {
