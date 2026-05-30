@@ -15,7 +15,7 @@ struct ContentPaneView: View {
     var body: some View {
         Group {
             if let project = selection.selectedProject {
-                projectView(project: project)
+                ProjectContentView(project: project, mode: $mode)
             } else if let savedView = selection.selectedSavedView {
                 savedViewContent(savedView: savedView)
             } else {
@@ -30,40 +30,12 @@ struct ContentPaneView: View {
         .onChange(of: appActions.pendingMode)       { handlePendingMode() }
     }
 
-    // MARK: - Project mode
-
-    @ViewBuilder
-    private func projectView(project: Project) -> some View {
-        let filtered = IssueFiltering.apply(project.unwrappedIssues, filterState)
-        VStack(spacing: 0) {
-            FilterBar()
-            switch mode {
-            case .list:  IssueListView(issues: filtered)
-            case .board: IssueBoardView(issues: filtered)
-            }
-        }
-        .navigationTitle(project.name)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { addIssue(to: project) } label: { Image(systemName: "plus") }
-                    .help("New Issue (⌘N)")
-            }
-            ToolbarItem(placement: .secondaryAction) {
-                Picker("View", selection: $mode) {
-                    SwiftUI.Label("List",  systemImage: "list.bullet").tag(ContentViewMode.list)
-                    SwiftUI.Label("Board", systemImage: "square.grid.2x2").tag(ContentViewMode.board)
-                }
-                .pickerStyle(.segmented)
-            }
-        }
-    }
-
-    // MARK: - Saved View mode (workspace-wide)
+    // MARK: - Saved View mode
 
     @ViewBuilder
     private func savedViewContent(savedView: SavedView) -> some View {
         let allIssues = savedView.workspace?.unwrappedProjects.flatMap(\.unwrappedIssues) ?? []
-        let filtered = IssueFiltering.apply(allIssues, filterState)
+        let filtered  = IssueFiltering.apply(allIssues, filterState)
         VStack(spacing: 0) {
             FilterBar()
             IssueListView(issues: filtered)
@@ -81,13 +53,59 @@ struct ContentPaneView: View {
     }
 
     private func handlePendingMode() {
-        if let m = appActions.pendingMode {
-            mode = m
-            appActions.pendingMode = nil
-        }
+        if let m = appActions.pendingMode { mode = m; appActions.pendingMode = nil }
     }
 
-    // MARK: - Helpers
+    private func addIssue(to project: Project) {
+        let issue = Issue(title: "")
+        issue.project = project
+        if project.issues == nil { project.issues = [] }
+        project.issues?.append(issue)
+        context.insert(issue)
+        try? context.save()
+        selection.selectedIssue = issue
+        appActions.focusNewIssueTitle = true
+    }
+}
+
+// MARK: - ProjectContentView
+// Separate struct so we can use @Bindable for inline title editing.
+// .navigationTitle($project.name) makes the title editable on double-click.
+
+private struct ProjectContentView: View {
+    @Bindable var project: Project
+    @Binding var mode: ContentViewMode
+    @Environment(Selection.self) private var selection
+    @Environment(FilterState.self) private var filterState
+    @Environment(AppActions.self) private var appActions
+    @Environment(\.modelContext) private var context
+
+    var body: some View {
+        let filtered = IssueFiltering.apply(project.unwrappedIssues, filterState)
+        VStack(spacing: 0) {
+            FilterBar()
+            switch mode {
+            case .list:  IssueListView(issues: filtered)
+            case .board: IssueBoardView(issues: filtered)
+            }
+        }
+        // Double-click the title in the toolbar to rename inline
+        .navigationTitle($project.name)
+        .onChange(of: project.name) { try? context.save() }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { addIssue(to: project) } label: { Image(systemName: "plus") }
+                    .help("New Issue (⌘N)")
+            }
+            ToolbarItem(placement: .secondaryAction) {
+                Picker("View", selection: $mode) {
+                    SwiftUI.Label("List",  systemImage: "list.bullet").tag(ContentViewMode.list)
+                    SwiftUI.Label("Board", systemImage: "square.grid.2x2").tag(ContentViewMode.board)
+                }
+                .pickerStyle(.segmented)
+            }
+        }
+    }
 
     private func addIssue(to project: Project) {
         let issue = Issue(title: "")
