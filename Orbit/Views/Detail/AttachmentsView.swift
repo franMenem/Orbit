@@ -2,95 +2,130 @@ import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
 
-/// Attachments section shown inside IssueDetailView.
-/// Supports drag-and-drop from Finder and a file picker button.
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - AttachmentsView
+// ─────────────────────────────────────────────────────────────────────────────
+
 struct AttachmentsView: View {
     @Bindable var issue: Issue
     @Environment(\.modelContext) private var context
+
     @State private var isDragTargeted = false
-    @State private var previewAttachment: Attachment? = nil
+    @State private var showFilePicker  = false
+    @State private var preview: Attachment? = nil
 
     var attachments: [Attachment] {
         (issue.attachments ?? []).sorted { $0.createdAt < $1.createdAt }
     }
 
+    // Adaptive grid: min 100px per card, fills available width
+    let columns = [GridItem(.adaptive(minimum: 100, maximum: 150), spacing: 10)]
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Drop target + file list
-            ZStack(alignment: .top) {
-                RoundedRectangle(cornerRadius: 8)
+        VStack(alignment: .leading, spacing: 10) {
+
+            // ── Header ────────────────────────────────────────────────────
+            HStack {
+                if !attachments.isEmpty {
+                    Text("\(attachments.count) file\(attachments.count == 1 ? "" : "s")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button {
+                    showFilePicker = true
+                } label: {
+                    SwiftUI.Label("Add Files", systemImage: "plus")
+                        .font(.caption.weight(.medium))
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+            // ── Drop zone / grid ──────────────────────────────────────────
+            ZStack {
+                // Background + border
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(isDragTargeted
+                          ? Color.accentColor.opacity(0.08)
+                          : Color.primary.opacity(0.03))
+                RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(
-                        isDragTargeted ? Color.accentColor : Color.secondary.opacity(0.3),
-                        style: StrokeStyle(lineWidth: isDragTargeted ? 2 : 1, dash: [6])
+                        isDragTargeted ? Color.accentColor : Color.primary.opacity(0.12),
+                        style: StrokeStyle(lineWidth: isDragTargeted ? 2 : 1, dash: isDragTargeted ? [] : [5, 4])
                     )
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(isDragTargeted
-                                  ? Color.accentColor.opacity(0.07)
-                                  : Color.secondary.opacity(0.04))
-                    )
+                    .animation(.easeInOut(duration: 0.15), value: isDragTargeted)
 
                 if attachments.isEmpty {
-                    VStack(spacing: 6) {
-                        Image(systemName: "paperclip")
-                            .font(.title2)
-                            .foregroundStyle(.tertiary)
-                        Text("Drop files here or click Add")
+                    // Empty state
+                    VStack(spacing: 8) {
+                        Image(systemName: isDragTargeted ? "arrow.down.circle.fill" : "paperclip.circle")
+                            .font(.system(size: 28))
+                            .foregroundStyle(isDragTargeted ? Color.accentColor : Color.secondary.opacity(0.5))
+                            .animation(.easeInOut(duration: 0.15), value: isDragTargeted)
+                        Text(isDragTargeted ? "Release to attach" : "Drop files or click Add Files")
                             .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(.secondary)
                     }
-                    .padding(.vertical, 20)
                     .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
                 } else {
-                    VStack(spacing: 0) {
+                    // File grid
+                    LazyVGrid(columns: columns, spacing: 10) {
                         ForEach(attachments) { att in
-                            AttachmentRow(attachment: att) {
-                                remove(att)
-                            } onPreview: {
-                                previewAttachment = att
-                            }
-                            if att.id != attachments.last?.id {
-                                Divider().padding(.leading, 36)
-                            }
+                            AttachmentCard(
+                                attachment: att,
+                                onPreview: { preview = att },
+                                onRemove:  { remove(att) }
+                            )
                         }
                     }
-                    .padding(.vertical, 4)
+                    .padding(12)
                 }
             }
-            .frame(minHeight: attachments.isEmpty ? 70 : nil)
-            .dropDestination(for: URL.self) { urls, _ in
-                attachFiles(urls: urls); return true
-            } isTargeted: { isDragTargeted = $0 }
-
-            // Add button
-            Button {
-                openFilePicker()
-            } label: {
-                SwiftUI.Label("Add Files", systemImage: "plus.circle")
-                    .font(.caption)
+            .frame(minHeight: attachments.isEmpty ? 80 : nil)
+            // Drag & drop from Finder
+            .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDragTargeted) { providers in
+                for provider in providers {
+                    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier) { item, _ in
+                        guard let data = item as? Data,
+                              let url  = URL(dataRepresentation: data, relativeTo: nil) else { return }
+                        DispatchQueue.main.async { attachFile(url: url) }
+                    }
+                }
+                return true
             }
-            .buttonStyle(.borderless)
         }
-        // Quick-look preview for images
-        .sheet(item: $previewAttachment) { att in
-            AttachmentPreview(attachment: att)
+        // ── File importer (the correct SwiftUI API for file picking) ──────
+        .fileImporter(
+            isPresented: $showFilePicker,
+            allowedContentTypes: [.item],
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls): urls.forEach { attachFile(url: $0) }
+            case .failure: break
+            }
+        }
+        // ── Image preview sheet ───────────────────────────────────────────
+        .sheet(item: $preview) { att in
+            ImagePreviewSheet(attachment: att)
         }
     }
 
-    // MARK: - File handling
+    // MARK: - Helpers
 
-    private func attachFiles(urls: [URL]) {
-        for url in urls {
-            guard url.startAccessingSecurityScopedResource() else { continue }
-            defer { url.stopAccessingSecurityScopedResource() }
-            guard let data = try? Data(contentsOf: url) else { continue }
-            let uti = UTType(filenameExtension: url.pathExtension)?.identifier ?? "public.data"
-            let att = Attachment(filename: url.lastPathComponent, contentType: uti, data: data)
-            att.issue = issue
-            if issue.attachments == nil { issue.attachments = [] }
-            issue.attachments?.append(att)
-            context.insert(att)
-        }
+    private func attachFile(url: URL) {
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+
+        guard let data = try? Data(contentsOf: url) else { return }
+        let uti = UTType(filenameExtension: url.pathExtension)?.identifier ?? UTType.data.identifier
+        let att = Attachment(filename: url.lastPathComponent, contentType: uti, data: data)
+        att.issue = issue
+        if issue.attachments == nil { issue.attachments = [] }
+        issue.attachments?.append(att)
+        context.insert(att)
         try? context.save()
     }
 
@@ -99,137 +134,199 @@ struct AttachmentsView: View {
         context.delete(att)
         try? context.save()
     }
-
-    private func openFilePicker() {
-        let panel = NSOpenPanel()
-        panel.allowsMultipleSelection = true
-        panel.canChooseDirectories = false
-        panel.message = "Select files to attach to this issue"
-        if panel.runModal() == .OK {
-            attachFiles(urls: panel.urls)
-        }
-    }
 }
 
-// MARK: - AttachmentRow
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - AttachmentCard
+// ─────────────────────────────────────────────────────────────────────────────
 
-private struct AttachmentRow: View {
+private struct AttachmentCard: View {
     let attachment: Attachment
-    let onRemove: () -> Void
     let onPreview: () -> Void
+    let onRemove:  () -> Void
+
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            // Thumbnail or icon
-            Group {
-                if attachment.isImage, let data = attachment.data, let nsImg = NSImage(data: data) {
-                    Image(nsImage: nsImg)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 28, height: 28)
-                        .clipShape(RoundedRectangle(cornerRadius: 4))
-                } else {
-                    Image(systemName: fileIcon(for: attachment.contentType))
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
+        ZStack(alignment: .topTrailing) {
+            // Card body
+            Button(action: tap) {
+                VStack(spacing: 0) {
+                    // ── Thumbnail / icon area ─────────────────────────────
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(iconBackgroundColor.opacity(0.12))
+                            .frame(height: 80)
+
+                        if attachment.isImage,
+                           let data = attachment.data,
+                           let img  = NSImage(data: data) {
+                            Image(nsImage: img)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(height: 80)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        } else {
+                            Image(systemName: fileSymbol)
+                                .font(.system(size: 28))
+                                .foregroundStyle(iconBackgroundColor)
+                        }
+                    }
+
+                    // ── Filename + size ───────────────────────────────────
+                    VStack(spacing: 2) {
+                        Text(attachment.filename)
+                            .font(.caption2.weight(.medium))
+                            .lineLimit(2)
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.primary)
+
+                        Text(attachment.fileSizeString)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 4)
+                    .padding(.vertical, 6)
                 }
             }
+            .buttonStyle(.plain)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.primary.opacity(isHovered ? 0.06 : 0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
+            )
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(attachment.filename)
-                    .font(.caption)
-                    .lineLimit(1)
-                Text(attachment.fileSizeString)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            // Preview button (images)
-            if attachment.isImage {
-                Button { onPreview() } label: {
-                    Image(systemName: "eye")
-                        .font(.caption)
+            // ── Delete button — visible on hover ─────────────────────────
+            if isHovered {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark.circle.fill")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(Color.white, Color.secondary)
+                        .font(.system(size: 16))
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(.secondary)
-                .help("Preview")
+                .buttonStyle(.plain)
+                .offset(x: 6, y: -6)
+                .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                .help("Remove")
             }
-
-            // Open in Finder / default app
-            Button {
-                openInDefaultApp(attachment)
-            } label: {
-                Image(systemName: "arrow.up.right.square")
-                    .font(.caption)
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-            .help("Open")
-
-            // Remove
-            Button(role: .destructive) { onRemove() } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.caption)
-            }
-            .buttonStyle(.borderless)
-            .foregroundStyle(.secondary)
-            .help("Remove")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .contentShape(Rectangle())
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
+        .onHover { isHovered = $0 }
     }
 
-    private func fileIcon(for contentType: String) -> String {
-        if contentType.contains("pdf")    { return "doc.richtext" }
-        if contentType.contains("video")  { return "play.rectangle" }
-        if contentType.contains("audio")  { return "waveform" }
-        if contentType.contains("zip") || contentType.contains("archive") { return "archivebox" }
-        if contentType.contains("text")   { return "doc.text" }
-        if contentType.contains("spreadsheet") || contentType.contains("excel") { return "tablecells" }
-        return "paperclip"
+    private func tap() {
+        if attachment.isImage { onPreview() }
+        else { openInDefaultApp() }
     }
 
-    private func openInDefaultApp(_ att: Attachment) {
-        guard let data = att.data else { return }
-        // Write to a temp file and open with NSWorkspace
-        let ext = att.filename.contains(".")
-            ? String(att.filename.split(separator: ".").last ?? "bin")
-            : "bin"
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent(att.filename.isEmpty ? "file.\(ext)" : att.filename)
+    private func openInDefaultApp() {
+        guard let data = attachment.data else { return }
+        let name = attachment.filename.isEmpty ? "file" : attachment.filename
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try? data.write(to: tmp)
         NSWorkspace.shared.open(tmp)
     }
+
+    // ── Visual metadata ───────────────────────────────────────────────────
+
+    private var fileSymbol: String {
+        let ct = attachment.contentType
+        if ct.contains("pdf")                        { return "doc.richtext.fill" }
+        if ct.contains("video")                      { return "play.rectangle.fill" }
+        if ct.contains("audio")                      { return "waveform" }
+        if ct.contains("zip") || ct.contains("archive") { return "archivebox.fill" }
+        if ct.contains("spreadsheet") || ct.contains("excel") || ct.contains("numbers") {
+            return "tablecells.fill"
+        }
+        if ct.contains("presentation") || ct.contains("keynote") || ct.contains("powerpoint") {
+            return "chart.bar.doc.horizontal.fill"
+        }
+        if ct.contains("text") || ct.contains("word") || ct.contains("pages") {
+            return "doc.text.fill"
+        }
+        if ct.contains("image")                      { return "photo.fill" }
+        return "doc.fill"
+    }
+
+    private var iconBackgroundColor: Color {
+        let ct = attachment.contentType
+        if ct.contains("pdf")                        { return .red }
+        if ct.contains("video")                      { return .purple }
+        if ct.contains("audio")                      { return .orange }
+        if ct.contains("zip") || ct.contains("archive") { return .yellow }
+        if ct.contains("spreadsheet") || ct.contains("excel") || ct.contains("numbers") {
+            return .green
+        }
+        if ct.contains("presentation") || ct.contains("keynote") || ct.contains("powerpoint") {
+            return .orange }
+        if ct.contains("text") || ct.contains("word") || ct.contains("pages") {
+            return .blue }
+        return .secondary
+    }
 }
 
-// MARK: - AttachmentPreview
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - ImagePreviewSheet
+// ─────────────────────────────────────────────────────────────────────────────
 
-private struct AttachmentPreview: View {
+private struct ImagePreviewSheet: View {
     let attachment: Attachment
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 0) {
-            if let data = attachment.data, let nsImg = NSImage(data: data) {
-                Image(nsImage: nsImg)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: 800, maxHeight: 600)
-            } else {
-                ContentUnavailableView("Cannot preview", systemImage: "eye.slash")
-                    .frame(width: 400, height: 300)
-            }
-            Divider()
+            // Toolbar
             HStack {
-                Text(attachment.filename).font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(attachment.filename)
+                        .font(.headline)
+                    Text(attachment.fileSizeString)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Spacer()
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button {
+                    openInDefaultApp()
+                } label: {
+                    SwiftUI.Label("Open", systemImage: "arrow.up.right.square")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
             }
-            .padding(12)
+            .padding(16)
+
+            Divider()
+
+            // Image
+            if let data = attachment.data, let img = NSImage(data: data) {
+                ScrollView([.horizontal, .vertical]) {
+                    Image(nsImage: img)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: 900, maxHeight: 700)
+                        .padding(16)
+                }
+            } else {
+                ContentUnavailableView("Cannot preview this file", systemImage: "eye.slash")
+                    .frame(width: 480, height: 320)
+            }
         }
+        .frame(minWidth: 480, minHeight: 360)
+        .background(.background)
+    }
+
+    private func openInDefaultApp() {
+        guard let data = attachment.data else { return }
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent(attachment.filename.isEmpty ? "preview" : attachment.filename)
+        try? data.write(to: tmp)
+        NSWorkspace.shared.open(tmp)
     }
 }
