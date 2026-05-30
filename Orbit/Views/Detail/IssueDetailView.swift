@@ -75,6 +75,20 @@ private struct IssueEditorView: View {
                     .onChange(of: issue.details) { save() }
             }
 
+            Section {
+                TextEditor(text: $issue.solution)
+                    .frame(minHeight: 80)
+                    .onChange(of: issue.solution) { save() }
+            } header: {
+                SwiftUI.Label("Solution", systemImage: "checkmark.seal")
+                    .foregroundStyle(.green)
+            } footer: {
+                if issue.solution.isEmpty {
+                    Text("Document how this was resolved — included when you Copy for AI.")
+                        .font(.caption2).foregroundStyle(.tertiary)
+                }
+            }
+
             Section("Properties") {
                 Picker("Status", selection: $issue.status) {
                     ForEach(IssueStatus.allCases, id: \.self) { status in
