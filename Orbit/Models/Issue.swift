@@ -18,6 +18,9 @@ final class Issue {
     @Relationship(deleteRule: .nullify, inverse: \Label.issues)
     var labels: [Label]? = []
 
+    @Relationship(deleteRule: .cascade, inverse: \Attachment.issue)
+    var attachments: [Attachment]? = []
+
     var unwrappedLabels: [Label] {
         (labels ?? []).sorted { $0.name < $1.name }
     }
