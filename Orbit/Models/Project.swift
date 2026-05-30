@@ -5,6 +5,7 @@ import SwiftData
 final class Project {
     var id: UUID = UUID()
     var name: String = "New Project"
+    var details: String = ""
     var createdAt: Date = Date.now
 
     var workspace: Workspace? = nil

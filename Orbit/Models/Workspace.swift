@@ -5,6 +5,8 @@ import SwiftData
 final class Workspace {
     var id: UUID = UUID()
     var name: String = "New Workspace"
+    var details: String = ""
+    var accentHex: String = ""          // "" means default accent
     var createdAt: Date = Date.now
 
     @Relationship(deleteRule: .cascade, inverse: \Project.workspace)

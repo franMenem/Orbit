@@ -84,6 +84,10 @@ private struct IssueEditorView: View {
                 LabelsRow(issue: issue)
             }
 
+            Section("Attachments") {
+                AttachmentsView(issue: issue)
+            }
+
             Section {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Created \(issue.createdAt.formatted(date: .abbreviated, time: .shortened))")

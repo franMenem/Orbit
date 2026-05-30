@@ -26,6 +26,7 @@ enum ContainerFactory {
         Issue.self,
         Label.self,
         SavedView.self,
+        Attachment.self,
     ])
 
     /// Returns a ModelContainer. Uses CloudKit only when:
