@@ -6,6 +6,7 @@ final class Issue {
     var id: UUID = UUID()
     var title: String = ""
     var details: String = ""
+    var solution: String = ""
     var status: IssueStatus = IssueStatus.backlog
     var priority: IssuePriority = IssuePriority.none
     var createdAt: Date = Date.now
