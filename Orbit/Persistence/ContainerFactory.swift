@@ -47,13 +47,21 @@ enum ContainerFactory {
 
         // At this point ModelContainer init can throw Swift errors (schema
         // mismatches, migration issues) — those we CAN catch and recover from.
+        let container: ModelContainer
         do {
-            return try ModelContainer(for: schema, configurations: [config])
+            container = try ModelContainer(for: schema, configurations: [config])
         } catch {
             assertionFailure("ModelContainer init failed: \(error). Retrying with local store.")
             let fallback = ModelConfiguration(schema: schema)
-            return try! ModelContainer(for: schema, configurations: [fallback])
+            container = try! ModelContainer(for: schema, configurations: [fallback])
         }
+        // Enable undo/redo on the main context. SwiftData auto-registers
+        // every insert/update/delete with this UndoManager, so ⌘Z works
+        // for renames, deletes, attachment removals, label changes, etc.
+        Task { @MainActor in
+            container.mainContext.undoManager = UndoManager()
+        }
+        return container
     }
 
     /// True when the app has the iCloud container identifiers entitlement.
