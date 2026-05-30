@@ -1,15 +1,18 @@
 import Foundation
+import Security
 import SwiftData
 
 /// Builds the SwiftData ModelContainer with either a CloudKit-backed store
-/// or a plain local store (for unit tests / running without an iCloud account).
+/// or a plain local store.
 ///
-/// Usage:
-///   .modelContainer(ContainerFactory.make())
+/// CloudKit is ONLY used when the app has the required entitlement configured
+/// in Xcode (Signing & Capabilities → iCloud → CloudKit). Without that
+/// entitlement, CloudKit initialization hard-crashes at the OS level — it
+/// cannot be caught by Swift error handling.
 ///
-/// To force local-only during development, add the launch argument:
-///   -OrbitLocalStore YES
-/// or set the compile-time flag ORBIT_LOCAL_STORE=1 in your scheme.
+/// To test CloudKit after adding the capability, do NOT pass any flag;
+/// ContainerFactory will detect the entitlement automatically.
+/// To force local-only (e.g. for unit tests), add: -OrbitLocalStore YES
 enum ContainerFactory {
 
     // CloudKit container identifier — must match the one created in
@@ -25,48 +28,49 @@ enum ContainerFactory {
         SavedView.self,
     ])
 
-    /// Returns a ModelContainer. Defaults to CloudKit unless:
-    ///   • The `-OrbitLocalStore YES` launch argument is present, OR
-    ///   • `useCloudKit` is explicitly passed as false.
-    static func make(useCloudKit: Bool? = nil) -> ModelContainer {
-        let wantsCloud = useCloudKit ?? !isLocalStoreFlagSet()
+    /// Returns a ModelContainer. Uses CloudKit only when:
+    ///   1. The app's entitlement for iCloud containers is present (set in Xcode)
+    ///   2. The -OrbitLocalStore YES launch argument is NOT set
+    static func make() -> ModelContainer {
+        let useCloudKit = hasCloudKitEntitlement() && !isLocalStoreFlagSet()
 
         let config: ModelConfiguration
-        if wantsCloud {
+        if useCloudKit {
             config = ModelConfiguration(
                 schema: schema,
                 cloudKitDatabase: .private(cloudKitContainerID)
             )
         } else {
-            // Local-only — useful for testing without an iCloud account.
-            config = ModelConfiguration(
-                schema: schema,
-                isStoredInMemoryOnly: false
-            )
+            config = ModelConfiguration(schema: schema)
         }
 
+        // At this point ModelContainer init can throw Swift errors (schema
+        // mismatches, migration issues) — those we CAN catch and recover from.
         do {
             return try ModelContainer(for: schema, configurations: [config])
         } catch {
-            // If CloudKit config fails (e.g. capabilities not yet added),
-            // fall back gracefully to a local store rather than hard-crashing.
-            // The iCloudStatus service will surface the offline state to the user.
-            assertionFailure("Primary container failed: \(error). Falling back to local store.")
-            let fallback = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            assertionFailure("ModelContainer init failed: \(error). Retrying with local store.")
+            let fallback = ModelConfiguration(schema: schema)
             return try! ModelContainer(for: schema, configurations: [fallback])
         }
     }
 
+    /// True when the app has the iCloud container identifiers entitlement.
+    /// Without this entitlement, any CKContainer call hard-crashes at the OS
+    /// level — it cannot be caught by Swift do/catch.
+    static func hasCloudKitEntitlement() -> Bool {
+        guard let task = SecTaskCreateFromSelf(nil) else { return false }
+        let key = "com.apple.developer.icloud-container-identifiers" as CFString
+        let value = SecTaskCopyValueForEntitlement(task, key, nil)
+        return value != nil
+    }
+
     // MARK: - Private
 
-    /// True when the `-OrbitLocalStore YES` launch argument was passed.
     private static func isLocalStoreFlagSet() -> Bool {
         let args = ProcessInfo.processInfo.arguments
-        if let idx = args.firstIndex(of: "-OrbitLocalStore"),
-           args.indices.contains(idx + 1),
-           args[idx + 1].lowercased() == "yes" {
-            return true
-        }
-        return false
+        guard let idx = args.firstIndex(of: "-OrbitLocalStore"),
+              args.indices.contains(idx + 1) else { return false }
+        return args[idx + 1].lowercased() == "yes"
     }
 }

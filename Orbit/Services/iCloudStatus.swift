@@ -5,30 +5,37 @@ import Foundation
 /// Monitors iCloud account availability and exposes it as observable state.
 /// The app remains fully functional when iCloud is unavailable — this service
 /// only surfaces a banner so the user knows sync is paused.
+///
+/// IMPORTANT: This service only attempts to contact CKContainer when the app
+/// has the required iCloud entitlement. Without it, any CKContainer call
+/// hard-crashes at the OS level (_os_crash), which Swift cannot catch.
 @Observable
 @MainActor
 final class iCloudStatus {
 
     enum Status {
-        /// CKAccountStatus was checked and the account is available.
         case available
-        /// iCloud is not configured, restricted, or temporarily unreachable.
         case unavailable(reason: String)
-        /// Check hasn't completed yet.
         case unknown
     }
 
     private(set) var status: Status = .unknown
 
-    /// True when a non-blocking "Working offline" banner should be shown.
     var showOfflineBanner: Bool {
         if case .unavailable = status { return true }
         return false
     }
 
     init() {
+        // Only attempt CloudKit access if the entitlement exists.
+        // Without the entitlement, CKContainer init hard-crashes the process.
+        guard ContainerFactory.hasCloudKitEntitlement() else {
+            // No entitlement = not configured yet. Don't show a banner;
+            // the app just runs in local mode silently.
+            status = .unknown
+            return
+        }
         Task { await refresh() }
-        // Re-check whenever the app comes back to the foreground.
         NotificationCenter.default.addObserver(
             forName: .CKAccountChanged,
             object: nil,
@@ -40,6 +47,7 @@ final class iCloudStatus {
     }
 
     func refresh() async {
+        guard ContainerFactory.hasCloudKitEntitlement() else { return }
         do {
             let accountStatus = try await CKContainer(
                 identifier: ContainerFactory.cloudKitContainerID
