@@ -1,6 +1,10 @@
 import SwiftUI
 import SwiftData
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - IssueDetailView (root)
+// ─────────────────────────────────────────────────────────────────────────────
+
 struct IssueDetailView: View {
     @Environment(Selection.self) private var selection
 
@@ -18,146 +22,45 @@ struct IssueDetailView: View {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - IssueEditorView (composer)
+// Responsibility: arrange sections + own the copy-confirmation toast state.
+// All editing logic is delegated to focused sub-views.
+// ─────────────────────────────────────────────────────────────────────────────
+
 private struct IssueEditorView: View {
     @Bindable var issue: Issue
     @Environment(\.modelContext) private var context
     @Environment(AppActions.self) private var appActions
-    @State private var hasDueDate: Bool
     @State private var copyConfirmation: String? = nil
     @FocusState private var isTitleFocused: Bool
 
-    init(issue: Issue) {
-        self.issue = issue
-        _hasDueDate = State(initialValue: issue.dueDate != nil)
-    }
-
     var body: some View {
         Form {
-            Section {
-                HStack(alignment: .center, spacing: 8) {
-                    TextField("Title", text: $issue.title)
-                        .font(.title3.weight(.semibold))
-                        .focused($isTitleFocused)
-                        .onChange(of: issue.title) { save() }
-                        .textFieldStyle(.plain)
-
-                    Menu {
-                        Button {
-                            let r = ClipboardService.copyIssueForAI(issue)
-                            showConfirmation(r.summary)
-                        } label: {
-                            SwiftUI.Label("Copy for AI (text + files)", systemImage: "sparkles")
-                        }
-                        Button {
-                            _ = ClipboardService.copyIssueAsMarkdown(issue)
-                            showConfirmation("Copied markdown")
-                        } label: {
-                            SwiftUI.Label("Copy as Markdown only", systemImage: "doc.plaintext")
-                        }
-                    } label: {
-                        SwiftUI.Label("Copy for AI", systemImage: "sparkles")
-                            .font(.caption.weight(.medium))
-                    } primaryAction: {
-                        let r = ClipboardService.copyIssueForAI(issue)
-                        showConfirmation(r.summary)
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.visible)
-                    .fixedSize()
-                    .help("Copy this issue to the clipboard (⇧⌘C)")
-                    .keyboardShortcut("c", modifiers: [.command, .shift])
-                }
-            }
-
-            Section("Details") {
-                TextEditor(text: $issue.details)
-                    .frame(minHeight: 80)
-                    .onChange(of: issue.details) { save() }
-            }
-
-            Section {
-                TextEditor(text: $issue.solution)
-                    .frame(minHeight: 80)
-                    .onChange(of: issue.solution) { save() }
-            } header: {
-                SwiftUI.Label("Solution", systemImage: "checkmark.seal")
-                    .foregroundStyle(.green)
-            } footer: {
-                if issue.solution.isEmpty {
-                    Text("Document how this was resolved — included when you Copy for AI.")
-                        .font(.caption2).foregroundStyle(.tertiary)
-                }
-            }
-
-            Section("Properties") {
-                Picker("Status", selection: $issue.status) {
-                    ForEach(IssueStatus.allCases, id: \.self) { status in
-                        Text(status.displayName).tag(status)
-                    }
-                }
-                .onChange(of: issue.status) { save() }
-
-                Picker("Priority", selection: $issue.priority) {
-                    ForEach(IssuePriority.allCases, id: \.self) { priority in
-                        SwiftUI.Label(priority.displayName, systemImage: priority.symbolName)
-                            .tag(priority)
-                    }
-                }
-                .onChange(of: issue.priority) { save() }
-            }
-
-            Section("Due Date") {
-                Toggle("Has due date", isOn: $hasDueDate)
-                    .onChange(of: hasDueDate) {
-                        issue.dueDate = hasDueDate ? (issue.dueDate ?? Date.now) : nil
-                        save()
-                    }
-                if hasDueDate {
-                    DatePicker(
-                        "Due date",
-                        selection: Binding(
-                            get: { issue.dueDate ?? Date.now },
-                            set: { issue.dueDate = $0; save() }
-                        ),
-                        displayedComponents: .date
-                    )
-                }
-            }
+            IssueTitleHeader(
+                issue: issue,
+                isTitleFocused: $isTitleFocused,
+                onSave: save,
+                onCopyDone: showConfirmation
+            )
+            IssueDetailsSection(issue: issue, onSave: save)
+            IssueSolutionSection(issue: issue, onSave: save)
+            IssuePropertiesSection(issue: issue, onSave: save)
+            IssueDueDateSection(issue: issue, onSave: save)
 
             Section("Labels") {
                 LabelsRow(issue: issue)
             }
-
             Section("Attachments") {
                 AttachmentsView(issue: issue)
             }
 
-            Section {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Created \(issue.createdAt.formatted(date: .abbreviated, time: .shortened))")
-                    Text("Updated \(issue.updatedAt.formatted(date: .abbreviated, time: .shortened))")
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
+            IssueMetadataFooter(issue: issue)
         }
         .formStyle(.grouped)
         .navigationTitle(issue.title.isEmpty ? "Untitled Issue" : issue.title)
         .overlay(alignment: .top) {
-            if let msg = copyConfirmation {
-                HStack(spacing: 6) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
-                    Text(msg).font(.caption.weight(.medium))
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(.thinMaterial, in: Capsule())
-                .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
-                .shadow(color: Color.black.opacity(0.15), radius: 6, y: 2)
-                .padding(.top, 12)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
+            CopyConfirmationPill(message: copyConfirmation)
         }
         .onChange(of: appActions.focusNewIssueTitle) {
             if appActions.focusNewIssueTitle {
@@ -180,6 +83,228 @@ private struct IssueEditorView: View {
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - IssueTitleHeader
+// Responsibility: title field + Copy-for-AI menu trigger.
+// ─────────────────────────────────────────────────────────────────────────────
+
+private struct IssueTitleHeader: View {
+    @Bindable var issue: Issue
+    @FocusState.Binding var isTitleFocused: Bool
+    let onSave: () -> Void
+    let onCopyDone: (String) -> Void
+
+    var body: some View {
+        Section {
+            HStack(alignment: .center, spacing: 8) {
+                TextField("Title", text: $issue.title)
+                    .font(.title3.weight(.semibold))
+                    .focused($isTitleFocused)
+                    .onChange(of: issue.title) { onSave() }
+                    .textFieldStyle(.plain)
+
+                CopyForAIMenu(issue: issue, onCopyDone: onCopyDone)
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - CopyForAIMenu
+// Responsibility: the split-button that triggers the two clipboard modes.
+// ─────────────────────────────────────────────────────────────────────────────
+
+private struct CopyForAIMenu: View {
+    let issue: Issue
+    let onCopyDone: (String) -> Void
+
+    var body: some View {
+        Menu {
+            Button { copyForAI() } label: {
+                SwiftUI.Label("Copy for AI (text + files)", systemImage: "sparkles")
+            }
+            Button { copyMarkdown() } label: {
+                SwiftUI.Label("Copy as Markdown only", systemImage: "doc.plaintext")
+            }
+        } label: {
+            SwiftUI.Label("Copy for AI", systemImage: "sparkles")
+                .font(.caption.weight(.medium))
+        } primaryAction: {
+            copyForAI()
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.visible)
+        .fixedSize()
+        .help("Copy this issue to the clipboard (⇧⌘C)")
+        .keyboardShortcut("c", modifiers: [.command, .shift])
+    }
+
+    private func copyForAI() {
+        let result = ClipboardService.copyIssueForAI(issue)
+        onCopyDone(result.summary)
+    }
+
+    private func copyMarkdown() {
+        _ = ClipboardService.copyIssueAsMarkdown(issue)
+        onCopyDone("Copied markdown")
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - IssueDetailsSection
+// ─────────────────────────────────────────────────────────────────────────────
+
+private struct IssueDetailsSection: View {
+    @Bindable var issue: Issue
+    let onSave: () -> Void
+
+    var body: some View {
+        Section("Details") {
+            TextEditor(text: $issue.details)
+                .frame(minHeight: 80)
+                .onChange(of: issue.details) { onSave() }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - IssueSolutionSection
+// ─────────────────────────────────────────────────────────────────────────────
+
+private struct IssueSolutionSection: View {
+    @Bindable var issue: Issue
+    let onSave: () -> Void
+
+    var body: some View {
+        Section {
+            TextEditor(text: $issue.solution)
+                .frame(minHeight: 80)
+                .onChange(of: issue.solution) { onSave() }
+        } header: {
+            SwiftUI.Label("Solution", systemImage: "checkmark.seal")
+                .foregroundStyle(.green)
+        } footer: {
+            if issue.solution.isEmpty {
+                Text("Document how this was resolved — included when you Copy for AI.")
+                    .font(.caption2).foregroundStyle(.tertiary)
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - IssuePropertiesSection
+// ─────────────────────────────────────────────────────────────────────────────
+
+private struct IssuePropertiesSection: View {
+    @Bindable var issue: Issue
+    let onSave: () -> Void
+
+    var body: some View {
+        Section("Properties") {
+            Picker("Status", selection: $issue.status) {
+                ForEach(IssueStatus.allCases, id: \.self) { status in
+                    Text(status.displayName).tag(status)
+                }
+            }
+            .onChange(of: issue.status) { onSave() }
+
+            Picker("Priority", selection: $issue.priority) {
+                ForEach(IssuePriority.allCases, id: \.self) { priority in
+                    SwiftUI.Label(priority.displayName, systemImage: priority.symbolName)
+                        .tag(priority)
+                }
+            }
+            .onChange(of: issue.priority) { onSave() }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - IssueDueDateSection
+// ─────────────────────────────────────────────────────────────────────────────
+
+private struct IssueDueDateSection: View {
+    @Bindable var issue: Issue
+    let onSave: () -> Void
+    @State private var hasDueDate: Bool
+
+    init(issue: Issue, onSave: @escaping () -> Void) {
+        self.issue = issue
+        self.onSave = onSave
+        _hasDueDate = State(initialValue: issue.dueDate != nil)
+    }
+
+    var body: some View {
+        Section("Due Date") {
+            Toggle("Has due date", isOn: $hasDueDate)
+                .onChange(of: hasDueDate) {
+                    issue.dueDate = hasDueDate ? (issue.dueDate ?? Date.now) : nil
+                    onSave()
+                }
+            if hasDueDate {
+                DatePicker(
+                    "Due date",
+                    selection: Binding(
+                        get: { issue.dueDate ?? Date.now },
+                        set: { issue.dueDate = $0; onSave() }
+                    ),
+                    displayedComponents: .date
+                )
+            }
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - IssueMetadataFooter
+// ─────────────────────────────────────────────────────────────────────────────
+
+private struct IssueMetadataFooter: View {
+    let issue: Issue
+
+    var body: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Created \(issue.createdAt.formatted(date: .abbreviated, time: .shortened))")
+                Text("Updated \(issue.updatedAt.formatted(date: .abbreviated, time: .shortened))")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - CopyConfirmationPill
+// Responsibility: render the floating "Copied · …" toast.
+// ─────────────────────────────────────────────────────────────────────────────
+
+private struct CopyConfirmationPill: View {
+    let message: String?
+
+    var body: some View {
+        if let message {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text(message).font(.caption.weight(.medium))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(.thinMaterial, in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08), lineWidth: 1))
+            .shadow(color: Color.black.opacity(0.15), radius: 6, y: 2)
+            .padding(.top, 12)
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - LabelsRow
+// ─────────────────────────────────────────────────────────────────────────────
+
 private struct LabelsRow: View {
     @Bindable var issue: Issue
     @State private var showPicker = false
@@ -191,7 +316,6 @@ private struct LabelsRow: View {
             FlowLayout(spacing: 4) {
                 ForEach(issue.unwrappedLabels) { label in
                     LabelChip(name: label.name, colorHex: label.colorHex) {
-                        // remove on ×
                         issue.labels?.removeAll { $0.persistentModelID == label.persistentModelID }
                         label.issues?.removeAll { $0.persistentModelID == issue.persistentModelID }
                     }
@@ -214,7 +338,10 @@ private struct LabelsRow: View {
     }
 }
 
-/// Simple flow layout for chips.
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - FlowLayout (utility)
+// ─────────────────────────────────────────────────────────────────────────────
+
 private struct FlowLayout: Layout {
     var spacing: CGFloat = 4
 
