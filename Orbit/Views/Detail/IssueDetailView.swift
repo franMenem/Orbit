@@ -160,9 +160,11 @@ private struct IssueDetailsSection: View {
 
     var body: some View {
         Section("Details") {
-            TextEditor(text: $issue.details)
-                .frame(minHeight: 80)
-                .onChange(of: issue.details) { onSave() }
+            RichTextField(
+                text: $issue.details,
+                placeholder: "Describe the issue… (markdown supported)",
+                onCommit: onSave
+            )
         }
     }
 }
@@ -177,15 +179,17 @@ private struct IssueSolutionSection: View {
 
     var body: some View {
         Section {
-            TextEditor(text: $issue.solution)
-                .frame(minHeight: 80)
-                .onChange(of: issue.solution) { onSave() }
+            RichTextField(
+                text: $issue.solution,
+                placeholder: "Document how this was resolved… (markdown supported)",
+                onCommit: onSave
+            )
         } header: {
             SwiftUI.Label("Solution", systemImage: "checkmark.seal")
                 .foregroundStyle(.green)
         } footer: {
             if issue.solution.isEmpty {
-                Text("Document how this was resolved — included when you Copy for AI.")
+                Text("Included when you Copy for AI.")
                     .font(.caption2).foregroundStyle(.tertiary)
             }
         }
