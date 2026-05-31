@@ -30,9 +30,12 @@ final class FilterState {
     var labelIDs: Set<UUID> = []
     var searchText: String = ""
     var sort: IssueSort = .createdAtDesc
+    /// Quick toggle: when true, hides Done and Cancelled issues.
+    var hideCompleted: Bool = false
 
     var isActive: Bool {
-        !statuses.isEmpty || !priorities.isEmpty || !labelIDs.isEmpty || !searchText.isEmpty
+        !statuses.isEmpty || !priorities.isEmpty || !labelIDs.isEmpty
+            || !searchText.isEmpty || hideCompleted
     }
 
     func reset() {
@@ -41,6 +44,7 @@ final class FilterState {
         labelIDs = []
         searchText = ""
         sort = .createdAtDesc
+        hideCompleted = false
     }
 
     func load(from view: SavedView) {

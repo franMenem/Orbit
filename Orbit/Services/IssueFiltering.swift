@@ -19,6 +19,10 @@ enum IssueFiltering {
     // MARK: - Private
 
     private static func matches(_ issue: Issue, _ filter: FilterState) -> Bool {
+        // Quick "open" toggle: hide Done + Cancelled
+        if filter.hideCompleted, issue.status == .done || issue.status == .cancelled {
+            return false
+        }
         // Status: empty set = no constraint (OR within category)
         if !filter.statuses.isEmpty, !filter.statuses.contains(issue.status) { return false }
         // Priority: empty set = no constraint
