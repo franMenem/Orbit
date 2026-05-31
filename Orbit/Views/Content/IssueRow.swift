@@ -11,8 +11,16 @@ struct IssueRow: View {
                 .frame(width: 16)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(issue.title.isEmpty ? "Untitled" : issue.title)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    if issue.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                            .rotationEffect(.degrees(45))
+                    }
+                    Text(issue.title.isEmpty ? "Untitled" : issue.title)
+                        .lineLimit(1)
+                }
 
                 HStack(spacing: 6) {
                     StatusPill(status: issue.status)
