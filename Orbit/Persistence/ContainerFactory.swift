@@ -35,14 +35,22 @@ enum ContainerFactory {
     static func make() -> ModelContainer {
         let useCloudKit = hasCloudKitEntitlement() && !isLocalStoreFlagSet()
 
+        // CRITICAL: use a DEDICATED store file at a unique path. The SwiftData
+        // default (~/Library/Application Support/default.store) is SHARED by
+        // every unsandboxed SwiftData app on the machine — another app writing
+        // its own "default.store" silently overwrites Orbit's data. Pin Orbit
+        // to its own folder so nothing else can collide with it.
+        let storeURL = dedicatedStoreURL()
+
         let config: ModelConfiguration
         if useCloudKit {
             config = ModelConfiguration(
                 schema: schema,
+                url: storeURL,
                 cloudKitDatabase: .private(cloudKitContainerID)
             )
         } else {
-            config = ModelConfiguration(schema: schema)
+            config = ModelConfiguration(schema: schema, url: storeURL)
         }
 
         // At this point ModelContainer init can throw Swift errors (schema
@@ -51,8 +59,8 @@ enum ContainerFactory {
         do {
             container = try ModelContainer(for: schema, configurations: [config])
         } catch {
-            assertionFailure("ModelContainer init failed: \(error). Retrying with local store.")
-            let fallback = ModelConfiguration(schema: schema)
+            assertionFailure("ModelContainer init failed: \(error). Retrying local-only at the dedicated path.")
+            let fallback = ModelConfiguration(schema: schema, url: storeURL)
             container = try! ModelContainer(for: schema, configurations: [fallback])
         }
         // Enable undo/redo on the main context. SwiftData auto-registers
@@ -75,6 +83,24 @@ enum ContainerFactory {
     }
 
     // MARK: - Private
+
+    /// Dedicated, Orbit-only store path:
+    /// ~/Library/Application Support/Orbit/Orbit.store
+    /// Created if missing. Never collides with other apps' default.store.
+    static func dedicatedStoreURL() -> URL {
+        let fm = FileManager.default
+        let appSupport = (try? fm.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )) ?? fm.temporaryDirectory
+        let dir = appSupport.appendingPathComponent("Orbit", isDirectory: true)
+        if !fm.fileExists(atPath: dir.path) {
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        }
+        return dir.appendingPathComponent("Orbit.store")
+    }
 
     private static func isLocalStoreFlagSet() -> Bool {
         let args = ProcessInfo.processInfo.arguments
