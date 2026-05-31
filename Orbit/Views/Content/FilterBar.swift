@@ -86,6 +86,18 @@ struct FilterBar: View {
                     }
                 }
 
+                // Quick "Open" toggle — hides Done + Cancelled
+                Button {
+                    filterState.hideCompleted.toggle()
+                } label: {
+                    SwiftUI.Label("Open", systemImage: filterState.hideCompleted ? "circle.lefthalf.filled" : "circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .tint(filterState.hideCompleted ? .accentColor : nil)
+                .help("Show only open issues (hide Done & Cancelled)")
+
                 // Sort menu
                 Menu {
                     ForEach(IssueSort.allCases, id: \.self) { sort in
