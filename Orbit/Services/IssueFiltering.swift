@@ -5,9 +5,15 @@ import Foundation
 enum IssueFiltering {
 
     static func apply(_ issues: [Issue], _ filter: FilterState) -> [Issue] {
-        issues
+        let base = comparator(for: filter.sort)
+        // Pinned issues always float to the top, then the chosen sort applies.
+        let pinnedFirst: (Issue, Issue) -> Bool = { a, b in
+            if a.isPinned != b.isPinned { return a.isPinned }
+            return base(a, b)
+        }
+        return issues
             .filter { matches($0, filter) }
-            .sorted(by: comparator(for: filter.sort))
+            .sorted(by: pinnedFirst)
     }
 
     // MARK: - Private

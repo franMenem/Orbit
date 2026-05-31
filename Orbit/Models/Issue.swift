@@ -9,6 +9,7 @@ final class Issue {
     var solution: String = ""
     var status: IssueStatus = IssueStatus.backlog
     var priority: IssuePriority = IssuePriority.none
+    var isPinned: Bool = false
     var createdAt: Date = Date.now
     var updatedAt: Date = Date.now
     var dueDate: Date? = nil

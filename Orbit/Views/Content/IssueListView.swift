@@ -24,6 +24,16 @@ struct IssueListView: View {
                         IssueRow(issue: issue)
                             .tag(issue)
                             .contextMenu {
+                                Button {
+                                    issue.isPinned.toggle()
+                                    try? context.save()
+                                } label: {
+                                    SwiftUI.Label(
+                                        issue.isPinned ? "Unpin" : "Pin to top",
+                                        systemImage: issue.isPinned ? "pin.slash" : "pin"
+                                    )
+                                }
+                                Divider()
                                 Button("Delete", role: .destructive) {
                                     sel.selectedIssue = issue
                                     showDeleteConfirm = true
