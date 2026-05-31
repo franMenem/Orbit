@@ -7,8 +7,10 @@ struct FilterBar: View {
     @Environment(AppActions.self) private var appActions
     @Environment(\.modelContext) private var context
     @State private var showSaveSheet = false
-    @State private var savedViewName = ""
     @FocusState private var isSearchFocused: Bool
+
+    /// Uniform height for every control in the bar — fixes the mismatched heights.
+    private let controlHeight: CGFloat = 26
 
     var activeWorkspace: Workspace? {
         selection.selectedProject?.workspace ?? selection.selectedSavedView?.workspace
@@ -18,141 +20,28 @@ struct FilterBar: View {
         @Bindable var fs = filterState
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                // Status filter
-                Menu {
-                    ForEach(IssueStatus.allCases, id: \.self) { status in
-                        Button {
-                            if filterState.statuses.contains(status) {
-                                filterState.statuses.remove(status)
-                            } else {
-                                filterState.statuses.insert(status)
-                            }
-                        } label: {
-                            HStack {
-                                Text(status.displayName)
-                                if filterState.statuses.contains(status) {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    FilterChipLabel(title: "Status", count: filterState.statuses.count)
-                }
-
-                // Priority filter
-                Menu {
-                    ForEach(IssuePriority.allCases, id: \.self) { priority in
-                        Button {
-                            if filterState.priorities.contains(priority) {
-                                filterState.priorities.remove(priority)
-                            } else {
-                                filterState.priorities.insert(priority)
-                            }
-                        } label: {
-                            HStack {
-                                SwiftUI.Label(priority.displayName, systemImage: priority.symbolName)
-                                if filterState.priorities.contains(priority) {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    FilterChipLabel(title: "Priority", count: filterState.priorities.count)
-                }
-
-                // Label filter
+                statusMenu
+                priorityMenu
                 if let workspace = activeWorkspace, !workspace.unwrappedLabels.isEmpty {
-                    Menu {
-                        ForEach(workspace.unwrappedLabels) { (label: Orbit.Label) in
-                            Button {
-                                if filterState.labelIDs.contains(label.id) {
-                                    filterState.labelIDs.remove(label.id)
-                                } else {
-                                    filterState.labelIDs.insert(label.id)
-                                }
-                            } label: {
-                                HStack {
-                                    Text(label.name)
-                                    if filterState.labelIDs.contains(label.id) {
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        FilterChipLabel(title: "Labels", count: filterState.labelIDs.count)
-                    }
+                    labelMenu(workspace)
                 }
 
-                // Quick "Open" toggle — hides Done + Cancelled
-                Button {
-                    filterState.hideCompleted.toggle()
-                } label: {
-                    SwiftUI.Label("Open", systemImage: filterState.hideCompleted ? "circle.lefthalf.filled" : "circle")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .tint(filterState.hideCompleted ? .accentColor : nil)
-                .help("Show only open issues (hide Done & Cancelled)")
+                Divider().frame(height: 16)
 
-                // Sort menu
-                Menu {
-                    ForEach(IssueSort.allCases, id: \.self) { sort in
-                        Button {
-                            filterState.sort = sort
-                        } label: {
-                            HStack {
-                                Text(sort.displayName)
-                                if filterState.sort == sort {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    SwiftUI.Label("Sort", systemImage: "arrow.up.arrow.down")
-                        .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                openToggle
+                sortMenu
 
-                Spacer()
+                Spacer(minLength: 12)
 
-                // Search field
-                HStack(spacing: 4) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                    TextField("Search", text: $fs.searchText)
-                        .textFieldStyle(.plain)
-                        .font(.caption)
-                        .frame(width: 140)
-                        .focused($isSearchFocused)
-                }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(.quaternary)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                searchField
 
-                // Clear + Save
                 if filterState.isActive {
-                    Button(action: { filterState.reset() }) {
-                        Image(systemName: "xmark.circle.fill")
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-                    .help("Clear filters")
-
-                    Button("Save View") { showSaveSheet = true }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
+                    clearButton
+                    saveButton
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
             .background(.bar)
             Divider()
         }
@@ -163,11 +52,154 @@ struct FilterBar: View {
             }
         }
         .sheet(isPresented: $showSaveSheet) {
-            SaveViewSheet(isPresented: $showSaveSheet, onSave: { name in
-                saveView(name: name)
-            })
+            SaveViewSheet(isPresented: $showSaveSheet, onSave: { name in saveView(name: name) })
         }
     }
+
+    // MARK: - Controls
+
+    private var statusMenu: some View {
+        Menu {
+            ForEach(IssueStatus.allCases, id: \.self) { status in
+                Toggle(status.displayName, isOn: Binding(
+                    get: { filterState.statuses.contains(status) },
+                    set: { on in
+                        if on { filterState.statuses.insert(status) }
+                        else  { filterState.statuses.remove(status) }
+                    }
+                ))
+            }
+        } label: {
+            FilterPill(title: "Status", count: filterState.statuses.count,
+                       icon: "circle.dashed", height: controlHeight)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var priorityMenu: some View {
+        Menu {
+            ForEach(IssuePriority.allCases, id: \.self) { priority in
+                Toggle(isOn: Binding(
+                    get: { filterState.priorities.contains(priority) },
+                    set: { on in
+                        if on { filterState.priorities.insert(priority) }
+                        else  { filterState.priorities.remove(priority) }
+                    }
+                )) {
+                    SwiftUI.Label(priority.displayName, systemImage: priority.symbolName)
+                }
+            }
+        } label: {
+            FilterPill(title: "Priority", count: filterState.priorities.count,
+                       icon: "flag", height: controlHeight)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private func labelMenu(_ workspace: Workspace) -> some View {
+        Menu {
+            ForEach(workspace.unwrappedLabels) { (label: Orbit.Label) in
+                Toggle(label.name, isOn: Binding(
+                    get: { filterState.labelIDs.contains(label.id) },
+                    set: { on in
+                        if on { filterState.labelIDs.insert(label.id) }
+                        else  { filterState.labelIDs.remove(label.id) }
+                    }
+                ))
+            }
+        } label: {
+            FilterPill(title: "Labels", count: filterState.labelIDs.count,
+                       icon: "tag", height: controlHeight)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var openToggle: some View {
+        Button {
+            filterState.hideCompleted.toggle()
+        } label: {
+            FilterPill(
+                title: "Open",
+                count: 0,
+                icon: filterState.hideCompleted ? "circle.lefthalf.filled" : "circle",
+                height: controlHeight,
+                active: filterState.hideCompleted
+            )
+        }
+        .buttonStyle(.plain)
+        .help("Show only open issues (hide Done & Cancelled)")
+    }
+
+    private var sortMenu: some View {
+        Menu {
+            ForEach(IssueSort.allCases, id: \.self) { sort in
+                Button {
+                    filterState.sort = sort
+                } label: {
+                    if filterState.sort == sort {
+                        SwiftUI.Label(sort.displayName, systemImage: "checkmark")
+                    } else {
+                        Text(sort.displayName)
+                    }
+                }
+            }
+        } label: {
+            FilterPill(title: "Sort", count: 0, icon: "arrow.up.arrow.down", height: controlHeight)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+
+    private var searchField: some View {
+        @Bindable var fs = filterState
+        return HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TextField("Search", text: $fs.searchText)
+                .textFieldStyle(.plain)
+                .font(.callout)
+                .frame(width: 160)
+                .focused($isSearchFocused)
+            if !filterState.searchText.isEmpty {
+                Button { filterState.searchText = "" } label: {
+                    Image(systemName: "xmark.circle.fill").font(.caption)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: controlHeight)
+        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+    }
+
+    private var clearButton: some View {
+        Button { filterState.reset() } label: {
+            Image(systemName: "xmark.circle.fill")
+                .frame(height: controlHeight)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.secondary)
+        .help("Clear all filters")
+    }
+
+    private var saveButton: some View {
+        Button { showSaveSheet = true } label: {
+            Text("Save View")
+                .font(.callout)
+                .padding(.horizontal, 10)
+                .frame(height: controlHeight)
+                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 7))
+                .foregroundStyle(.white)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Save
 
     private func saveView(name: String) {
         guard let workspace = activeWorkspace else { return }
@@ -181,26 +213,48 @@ struct FilterBar: View {
     }
 }
 
-private struct FilterChipLabel: View {
+// MARK: - FilterPill
+// Uniform-height control used by every filter menu/button so the bar
+// reads as one clean row instead of mismatched heights.
+
+private struct FilterPill: View {
     let title: String
-    let count: Int
+    var count: Int = 0
+    let icon: String
+    let height: CGFloat
+    var active: Bool = false
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.caption2)
             Text(title)
+                .font(.callout)
             if count > 0 {
                 Text("\(count)")
                     .font(.caption2.weight(.bold))
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(Color.accentColor)
+                    .background(Color.accentColor, in: Capsule())
                     .foregroundStyle(.white)
-                    .clipShape(Capsule())
             }
         }
-        .font(.caption)
+        .padding(.horizontal, 10)
+        .frame(height: height)
+        .background(
+            RoundedRectangle(cornerRadius: 7)
+                .fill(active ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(active ? Color.accentColor.opacity(0.5) : .clear, lineWidth: 1)
+        )
+        .foregroundStyle(active || count > 0 ? Color.accentColor : Color.primary)
+        .contentShape(Rectangle())
     }
 }
+
+// MARK: - SaveViewSheet
 
 private struct SaveViewSheet: View {
     @Binding var isPresented: Bool
@@ -208,12 +262,16 @@ private struct SaveViewSheet: View {
     @State private var name = ""
 
     var body: some View {
-        VStack(spacing: 16) {
+        VStack(alignment: .leading, spacing: 16) {
             Text("Save View").font(.headline)
+            Text("Saves the current filters and sort as a reusable view in this workspace.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             TextField("View name", text: $name)
                 .textFieldStyle(.roundedBorder)
-                .frame(width: 240)
+                .frame(width: 260)
             HStack {
+                Spacer()
                 Button("Cancel") { isPresented = false }
                 Button("Save") { onSave(name); isPresented = false }
                     .buttonStyle(.borderedProminent)
@@ -221,6 +279,6 @@ private struct SaveViewSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 300)
+        .frame(width: 320)
     }
 }
