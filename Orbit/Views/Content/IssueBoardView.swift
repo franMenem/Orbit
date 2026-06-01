@@ -55,16 +55,22 @@ private struct BoardColumn: View {
     @State private var isTargeted = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
+            HStack(spacing: DS.Space.sm) {
+                Image(systemName: status.glyph)
+                    .font(.caption)
+                    .foregroundStyle(status.color)
                 Text(status.displayName)
                     .font(.subheadline.weight(.semibold))
                 Spacer()
                 Text("\(issues.count)")
-                    .font(.caption)
+                    .font(.caption.weight(.medium))
                     .foregroundStyle(.secondary)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 1)
+                    .background(status.color.opacity(0.14), in: Capsule())
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, DS.Space.xs)
 
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 8) {

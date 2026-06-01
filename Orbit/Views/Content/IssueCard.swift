@@ -6,43 +6,48 @@ struct IssueCard: View {
     let isSelected: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(issue.title.isEmpty ? "Untitled" : issue.title)
-                .font(.subheadline)
-                .lineLimit(2)
-
-            HStack(spacing: 6) {
-                Image(systemName: issue.priority.symbolName)
-                    .font(.caption)
-                    .foregroundStyle(priorityColor)
-
-                if let due = issue.dueDate {
-                    SwiftUI.Label(due.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
+        VStack(alignment: .leading, spacing: DS.Space.sm) {
+            HStack(spacing: DS.Space.xs) {
+                if issue.isPinned {
+                    Image(systemName: "pin.fill")
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.orange)
+                        .rotationEffect(.degrees(45))
                 }
-                ForEach(issue.unwrappedLabels.prefix(2)) { label in
+                Text(issue.title.isEmpty ? "Untitled" : issue.title)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .lineLimit(2)
+            }
+
+            if issue.priority != .none || issue.dueDate != nil || !issue.unwrappedLabels.isEmpty {
+                HStack(spacing: DS.Space.sm) {
+                    if issue.priority != .none {
+                        Image(systemName: issue.priority.symbolName)
+                            .font(.caption)
+                            .foregroundStyle(issue.priority.color)
+                    }
+                    if let due = issue.dueDate {
+                        SwiftUI.Label(due.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                    ForEach(issue.unwrappedLabels.prefix(2)) { label in
                         LabelChip(name: label.name, colorHex: label.colorHex)
                     }
+                }
             }
         }
-        .padding(10)
+        .padding(DS.Space.md)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(isSelected ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isSelected ? 1.5 : 0.5)
+        .background(
+            isSelected ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor),
+            in: RoundedRectangle(cornerRadius: DS.Radius.control)
         )
-    }
-
-    private var priorityColor: Color {
-        switch issue.priority {
-        case .urgent: .red
-        case .high:   .orange
-        case .medium: .yellow
-        case .low:    .blue
-        case .none:   .secondary
-        }
+        .overlay(
+            RoundedRectangle(cornerRadius: DS.Radius.control)
+                .stroke(isSelected ? Color.accentColor : Color(nsColor: .separatorColor),
+                        lineWidth: isSelected ? 1.5 : 0.5)
+        )
     }
 }
