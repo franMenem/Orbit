@@ -22,10 +22,18 @@ struct IssueRow: View {
                             .foregroundStyle(.orange)
                             .rotationEffect(.degrees(45))
                     }
-                    Text(issue.title.isEmpty ? "Untitled" : issue.title)
-                        .font(.body)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
+                    if issue.title.isEmpty {
+                        Text("Untitled")
+                            .font(.body)
+                            .italic()
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    } else {
+                        Text(issue.title)
+                            .font(.body)
+                            .fontWeight(.medium)
+                            .lineLimit(1)
+                    }
                 }
 
                 // Metadata row — secondary
@@ -57,6 +65,9 @@ struct IssueRow: View {
         }
         .padding(.vertical, DS.Space.sm)
         .padding(.horizontal, DS.Space.xs)
+        // Uniform minimum height so rows without metadata (e.g. a brand-new
+        // "Untitled" issue) match rows that have a metadata line.
+        .frame(minHeight: 44, alignment: .center)
     }
 }
 

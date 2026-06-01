@@ -25,6 +25,7 @@ struct IssueListView: View {
                             IssueRow(issue: issue)
                                 .tag(issue)
                                 .id(issue.id)
+                                .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
                                 .contextMenu {
                                     Button {
                                         issue.isPinned.toggle()
