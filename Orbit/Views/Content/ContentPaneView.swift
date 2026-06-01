@@ -67,6 +67,37 @@ struct ContentPaneView: View {
         appActions.focusNewIssueTitle = true
     }
 }
+// MARK: - ProjectHeader
+// Editable project name shown at the top of the content pane. Click the name
+// to edit it inline — no need to find it in the sidebar.
+
+private struct ProjectHeader: View {
+    @Bindable var project: Project
+    let onSave: () -> Void
+    @FocusState private var nameFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.xs) {
+            TextField("Project name", text: $project.name)
+                .textFieldStyle(.plain)
+                .font(.title2.weight(.bold))
+                .focused($nameFocused)
+                .onChange(of: project.name) { onSave() }
+                .onSubmit { nameFocused = false }
+
+            if !project.details.isEmpty {
+                Text(project.details)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, DS.Space.lg)
+        .padding(.top, DS.Space.lg)
+        .padding(.bottom, DS.Space.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.bar)
+    }
+}
 
 // MARK: - ProjectContentView
 // Separate struct so we can use @Bindable for inline title editing.
@@ -83,14 +114,14 @@ private struct ProjectContentView: View {
     var body: some View {
         let filtered = IssueFiltering.apply(project.unwrappedIssues, filterState)
         VStack(spacing: 0) {
+            ProjectHeader(project: project, onSave: { try? context.save() })
             FilterBar()
             switch mode {
             case .list:  IssueListView(issues: filtered)
             case .board: IssueBoardView(issues: filtered)
             }
         }
-        // Double-click the title in the toolbar to rename inline
-        .navigationTitle($project.name)
+        .navigationTitle(project.name)
         .onChange(of: project.name) { try? context.save() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
