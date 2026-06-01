@@ -206,17 +206,32 @@ private struct IssuePropertiesSection: View {
 
     var body: some View {
         Section("Properties") {
-            Picker("Status", selection: $issue.status) {
+            Picker(selection: $issue.status) {
                 ForEach(IssueStatus.allCases, id: \.self) { status in
-                    Text(status.displayName).tag(status)
+                    SwiftUI.Label(status.displayName, systemImage: status.glyph)
+                        .tag(status)
+                }
+            } label: {
+                SwiftUI.Label {
+                    Text("Status")
+                } icon: {
+                    Image(systemName: issue.status.glyph)
+                        .foregroundStyle(issue.status.color)
                 }
             }
             .onChange(of: issue.status) { onSave() }
 
-            Picker("Priority", selection: $issue.priority) {
+            Picker(selection: $issue.priority) {
                 ForEach(IssuePriority.allCases, id: \.self) { priority in
                     SwiftUI.Label(priority.displayName, systemImage: priority.symbolName)
                         .tag(priority)
+                }
+            } label: {
+                SwiftUI.Label {
+                    Text("Priority")
+                } icon: {
+                    Image(systemName: issue.priority.symbolName)
+                        .foregroundStyle(issue.priority.color)
                 }
             }
             .onChange(of: issue.priority) { onSave() }
