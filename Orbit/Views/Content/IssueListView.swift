@@ -19,30 +19,41 @@ struct IssueListView: View {
                     description: Text("Press ⌘N to create an issue, or clear your filters.")
                 )
             } else {
-                List(selection: $sel.selectedIssue) {
-                    ForEach(issues) { issue in
-                        IssueRow(issue: issue)
-                            .tag(issue)
-                            .contextMenu {
-                                Button {
-                                    issue.isPinned.toggle()
-                                    try? context.save()
-                                } label: {
-                                    SwiftUI.Label(
-                                        issue.isPinned ? "Unpin" : "Pin to top",
-                                        systemImage: issue.isPinned ? "pin.slash" : "pin"
-                                    )
+                ScrollViewReader { proxy in
+                    List(selection: $sel.selectedIssue) {
+                        ForEach(issues) { issue in
+                            IssueRow(issue: issue)
+                                .tag(issue)
+                                .id(issue.id)
+                                .contextMenu {
+                                    Button {
+                                        issue.isPinned.toggle()
+                                        try? context.save()
+                                    } label: {
+                                        SwiftUI.Label(
+                                            issue.isPinned ? "Unpin" : "Pin to top",
+                                            systemImage: issue.isPinned ? "pin.slash" : "pin"
+                                        )
+                                    }
+                                    Divider()
+                                    Button("Delete", role: .destructive) {
+                                        sel.selectedIssue = issue
+                                        showDeleteConfirm = true
+                                    }
                                 }
-                                Divider()
-                                Button("Delete", role: .destructive) {
-                                    sel.selectedIssue = issue
-                                    showDeleteConfirm = true
-                                }
-                            }
+                        }
                     }
-                }
-                .onDeleteCommand {
-                    if selection.selectedIssue != nil { showDeleteConfirm = true }
+                    .onDeleteCommand {
+                        if selection.selectedIssue != nil { showDeleteConfirm = true }
+                    }
+                    // Keep the selected issue in view — especially a freshly
+                    // created one, which would otherwise be off-screen.
+                    .onChange(of: selection.selectedIssue) {
+                        guard let id = selection.selectedIssue?.id else { return }
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
                 }
             }
         }
