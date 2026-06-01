@@ -7,11 +7,21 @@ struct SidebarView: View {
     @Query(sort: \Workspace.createdAt) private var workspaces: [Workspace]
     @State private var labelManagerWorkspace: Workspace?
 
+    // Project edit/delete are hoisted to this stable view. An .alert or .sheet
+    // attached to a row nested inside a DisclosureGroup does NOT present in
+    // SwiftUI — so the project rename "did nothing". Presenting from here fixes it.
+    @State private var projectToEdit: Project?
+    @State private var projectToDelete: Project?
+
     var body: some View {
         @Bindable var sel = selection
         List(selection: $sel.selectedProject) {
             ForEach(workspaces) { workspace in
-                WorkspaceRow(workspace: workspace)
+                WorkspaceRow(
+                    workspace: workspace,
+                    onEditProject:   { projectToEdit = $0 },
+                    onDeleteProject: { projectToDelete = $0 }
+                )
             }
             ForEach(workspaces) { workspace in
                 SavedViewsSection(workspace: workspace)
@@ -20,6 +30,21 @@ struct SidebarView: View {
         .navigationTitle("Orbit")
         .sheet(item: $labelManagerWorkspace) { ws in
             LabelManagerView(workspace: ws)
+        }
+        // Project rename/description — presented from the stable SidebarView.
+        .sheet(item: $projectToEdit) { project in
+            ProjectEditSheet(project: project)
+        }
+        .confirmationDialog(
+            "Delete project \"\(projectToDelete?.name ?? "")\" and all its issues?",
+            isPresented: Binding(get: { projectToDelete != nil },
+                                 set: { if !$0 { projectToDelete = nil } }),
+            titleVisibility: .visible
+        ) {
+            Button("Delete", role: .destructive) {
+                if let project = projectToDelete { deleteProject(project) }
+            }
+            Button("Cancel", role: .cancel) { projectToDelete = nil }
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -65,6 +90,15 @@ struct SidebarView: View {
         try? context.save()
         selection.selectedProject = project
     }
+
+    private func deleteProject(_ project: Project) {
+        if selection.selectedProject?.persistentModelID == project.persistentModelID {
+            selection.selectedProject = nil
+        }
+        context.delete(project)
+        try? context.save()
+        projectToDelete = nil
+    }
 }
 
 // MARK: - WorkspaceRow
@@ -80,12 +114,14 @@ private enum WorkspaceEdit: Identifiable {
 
 private struct WorkspaceRow: View {
     @Bindable var workspace: Workspace
+    let onEditProject: (Project) -> Void
+    let onDeleteProject: (Project) -> Void
     @Environment(\.modelContext) private var context
     @Environment(Selection.self) private var selection
-    @State private var isExpanded    = true
+    @State private var isExpanded = true
     @State private var editing: WorkspaceEdit? = nil
-    @State private var editText      = ""
-    @State private var showColorPicker   = false
+    @State private var editText = ""
+    @State private var showColorPicker = false
     @State private var showDeleteConfirm = false
 
     var accentColor: Color {
@@ -95,7 +131,11 @@ private struct WorkspaceRow: View {
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
             ForEach(workspace.unwrappedProjects) { project in
-                ProjectRow(project: project)
+                ProjectRow(
+                    project: project,
+                    onEdit:   { onEditProject(project) },
+                    onDelete: { onDeleteProject(project) }
+                )
             }
             if workspace.unwrappedProjects.isEmpty {
                 Text("No projects")
@@ -115,9 +155,7 @@ private struct WorkspaceRow: View {
             }
         }
         .contextMenu {
-            Button("Rename Workspace") {
-                editText = workspace.name; editing = .rename
-            }
+            Button("Rename Workspace") { editText = workspace.name; editing = .rename }
             Button(workspace.details.isEmpty ? "Add Description…" : "Edit Description…") {
                 editText = workspace.details; editing = .description
             }
@@ -125,7 +163,6 @@ private struct WorkspaceRow: View {
             Divider()
             Button("Delete Workspace", role: .destructive) { showDeleteConfirm = true }
         }
-        // ── Single alert — driven by `editing` enum ───────────────────────
         .alert(
             editing?.title ?? "",
             isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })
@@ -161,21 +198,14 @@ private struct WorkspaceRow: View {
 }
 
 // MARK: - ProjectRow
-
-private enum ProjectEdit: Identifiable {
-    case rename, description
-    var id: Self { self }
-    var title: String { self == .rename ? "Rename Project" : "Project Description" }
-    var placeholder: String { self == .rename ? "Name" : "Short description (optional)" }
-}
+// Pure presentation + intent. Rename/description/delete are delegated UP to
+// SidebarView via closures, because alerts/sheets do not present from a row
+// nested inside a DisclosureGroup.
 
 private struct ProjectRow: View {
     @Bindable var project: Project
-    @Environment(\.modelContext) private var context
-    @Environment(Selection.self) private var selection
-    @State private var editing: ProjectEdit? = nil
-    @State private var editText      = ""
-    @State private var showDeleteConfirm = false
+    let onEdit: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 1) {
@@ -188,44 +218,66 @@ private struct ProjectRow: View {
         }
         .tag(project)
         .contextMenu {
-            Button("Rename Project") {
-                editText = project.name; editing = .rename
-            }
-            Button(project.details.isEmpty ? "Add Description…" : "Edit Description…") {
-                editText = project.details; editing = .description
-            }
+            Button("Rename / Edit…") { onEdit() }
             Divider()
-            Button("Delete Project", role: .destructive) { showDeleteConfirm = true }
+            Button("Delete Project", role: .destructive) { onDelete() }
         }
-        // ── Single alert ──────────────────────────────────────────────────
-        .alert(
-            editing?.title ?? "",
-            isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } })
-        ) {
-            TextField(editing?.placeholder ?? "", text: $editText)
-            Button("Save") {
-                let trimmed = editText.trimmingCharacters(in: .whitespaces)
-                switch editing {
-                case .rename:      if !trimmed.isEmpty { project.name = trimmed }
-                case .description: project.details = trimmed
-                case nil: break
-                }
-                editing = nil
-                try? context.save()
+    }
+}
+
+// MARK: - ProjectEditSheet
+// Name + description editor for a project. Presented from SidebarView so it
+// reliably appears (a sheet on the nested ProjectRow would not).
+
+private struct ProjectEditSheet: View {
+    @Bindable var project: Project
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var details: String
+    @FocusState private var nameFocused: Bool
+
+    init(project: Project) {
+        self.project = project
+        _name = State(initialValue: project.name)
+        _details = State(initialValue: project.details)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: DS.Space.lg) {
+            Text("Edit Project").font(.headline)
+
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Text("Name").font(.caption).foregroundStyle(.secondary)
+                TextField("Project name", text: $name)
+                    .textFieldStyle(.roundedBorder)
+                    .focused($nameFocused)
             }
-            Button("Cancel", role: .cancel) { editing = nil }
-        }
-        .confirmationDialog(
-            "Delete project \"\(project.name)\" and all its issues?",
-            isPresented: $showDeleteConfirm, titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                if selection.selectedProject?.persistentModelID == project.persistentModelID {
-                    selection.selectedProject = nil
+
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                Text("Description").font(.caption).foregroundStyle(.secondary)
+                TextField("Optional", text: $details, axis: .vertical)
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(2...4)
+            }
+
+            HStack {
+                Spacer()
+                Button("Cancel") { dismiss() }
+                Button("Save") {
+                    let trimmed = name.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty { project.name = trimmed }
+                    project.details = details.trimmingCharacters(in: .whitespaces)
+                    try? context.save()
+                    dismiss()
                 }
-                context.delete(project); try? context.save()
+                .buttonStyle(.borderedProminent)
+                .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
+        .padding(DS.Space.xl)
+        .frame(width: 360)
+        .onAppear { nameFocused = true }
     }
 }
 
