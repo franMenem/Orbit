@@ -121,7 +121,9 @@ private struct ProjectContentView: View {
             case .board: IssueBoardView(issues: filtered)
             }
         }
-        .navigationTitle(project.name)
+        // Window title bar shows the WORKSPACE for context; the project name
+        // lives ONLY in the editable ProjectHeader below — never shown twice.
+        .navigationTitle(project.workspace?.name ?? "Orbit")
         .onChange(of: project.name) { try? context.save() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
