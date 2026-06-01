@@ -5,13 +5,17 @@ struct IssueRow: View {
     let issue: Issue
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: issue.priority.symbolName)
-                .foregroundStyle(priorityColor)
-                .frame(width: 16)
+        HStack(alignment: .top, spacing: DS.Space.md) {
+            // Status glyph — colored, communicates state at a glance
+            Image(systemName: issue.status.glyph)
+                .font(.body)
+                .foregroundStyle(issue.status.color)
+                .frame(width: 18)
+                .padding(.top, 1)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: DS.Space.xs) {
+                // Title row — larger, clear hierarchy
+                HStack(spacing: DS.Space.xs) {
                     if issue.isPinned {
                         Image(systemName: "pin.fill")
                             .font(.caption2)
@@ -19,45 +23,57 @@ struct IssueRow: View {
                             .rotationEffect(.degrees(45))
                     }
                     Text(issue.title.isEmpty ? "Untitled" : issue.title)
+                        .font(.body)
+                        .fontWeight(.medium)
                         .lineLimit(1)
                 }
 
-                HStack(spacing: 6) {
-                    StatusPill(status: issue.status)
+                // Metadata row — secondary
+                HStack(spacing: DS.Space.sm) {
+                    // Priority (only when set — reduces noise)
+                    if issue.priority != .none {
+                        SwiftUI.Label {
+                            Text(issue.priority.displayName)
+                        } icon: {
+                            Image(systemName: issue.priority.symbolName)
+                        }
+                        .font(.caption)
+                        .foregroundStyle(issue.priority.color)
+                        .labelStyle(.titleAndIcon)
+                    }
+
                     if let due = issue.dueDate {
                         SwiftUI.Label(due.formatted(date: .abbreviated, time: .omitted), systemImage: "calendar")
-                            .font(.caption2)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
                     ForEach(issue.unwrappedLabels.prefix(3)) { label in
                         LabelChip(name: label.name, colorHex: label.colorHex)
                     }
                 }
             }
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 2)
-    }
-
-    private var priorityColor: Color {
-        switch issue.priority {
-        case .urgent: .red
-        case .high:   .orange
-        case .medium: .yellow
-        case .low:    .blue
-        case .none:   .secondary
-        }
+        .padding(.vertical, DS.Space.sm)
+        .padding(.horizontal, DS.Space.xs)
     }
 }
 
+/// Colored status pill — the tint is the signal.
 struct StatusPill: View {
     let status: IssueStatus
 
     var body: some View {
-        Text(status.displayName)
-            .font(.caption2)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(.quaternary)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+        HStack(spacing: 4) {
+            Image(systemName: status.glyph)
+                .font(.caption2)
+            Text(status.displayName)
+                .font(.caption2.weight(.medium))
+        }
+        .padding(.horizontal, DS.Space.sm)
+        .padding(.vertical, 3)
+        .foregroundStyle(status.color)
+        .background(status.color.opacity(0.14), in: Capsule())
     }
 }
