@@ -11,11 +11,13 @@ struct ContentPaneView: View {
     @Environment(AppActions.self) private var appActions
     @Environment(\.modelContext) private var context
     @AppStorage("contentMode") private var mode: ContentViewMode = .list
+    @State private var newIssueProject: Project?
 
     var body: some View {
         Group {
             if let project = selection.selectedProject {
-                ProjectContentView(project: project, mode: $mode)
+                ProjectContentView(project: project, mode: $mode,
+                                   onNewIssue: { newIssueProject = project })
             } else if let savedView = selection.selectedSavedView {
                 savedViewContent(savedView: savedView)
             } else {
@@ -28,6 +30,11 @@ struct ContentPaneView: View {
         }
         .onChange(of: appActions.createIssueSignal) { handleCreateIssue() }
         .onChange(of: appActions.pendingMode)       { handlePendingMode() }
+        .sheet(item: $newIssueProject) { project in
+            NewIssueSheet(project: project) { issue in
+                selection.selectedIssue = issue
+            }
+        }
     }
 
     // MARK: - Saved View mode
@@ -48,23 +55,12 @@ struct ContentPaneView: View {
     private func handleCreateIssue() {
         guard appActions.createIssueSignal else { return }
         appActions.createIssueSignal = false
-        let project = selection.selectedProject ?? SeedData.ensureSeed(context)
-        if let project { addIssue(to: project) }
+        // Open the New Issue sheet for the active (or first) project.
+        newIssueProject = selection.selectedProject ?? SeedData.ensureSeed(context)
     }
 
     private func handlePendingMode() {
         if let m = appActions.pendingMode { mode = m; appActions.pendingMode = nil }
-    }
-
-    private func addIssue(to project: Project) {
-        let issue = Issue(title: "")
-        issue.project = project
-        if project.issues == nil { project.issues = [] }
-        project.issues?.append(issue)
-        context.insert(issue)
-        try? context.save()
-        selection.selectedIssue = issue
-        appActions.focusNewIssueTitle = true
     }
 }
 // MARK: - ProjectHeader
@@ -106,9 +102,8 @@ private struct ProjectHeader: View {
 private struct ProjectContentView: View {
     @Bindable var project: Project
     @Binding var mode: ContentViewMode
-    @Environment(Selection.self) private var selection
+    let onNewIssue: () -> Void
     @Environment(FilterState.self) private var filterState
-    @Environment(AppActions.self) private var appActions
     @Environment(\.modelContext) private var context
 
     var body: some View {
@@ -127,7 +122,7 @@ private struct ProjectContentView: View {
         .onChange(of: project.name) { try? context.save() }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button { addIssue(to: project) } label: { Image(systemName: "plus") }
+                Button { onNewIssue() } label: { Image(systemName: "plus") }
                     .help("New Issue (⌘N)")
             }
             ToolbarItem(placement: .secondaryAction) {
@@ -138,16 +133,5 @@ private struct ProjectContentView: View {
                 .pickerStyle(.segmented)
             }
         }
-    }
-
-    private func addIssue(to project: Project) {
-        let issue = Issue(title: "")
-        issue.project = project
-        if project.issues == nil { project.issues = [] }
-        project.issues?.append(issue)
-        context.insert(issue)
-        try? context.save()
-        selection.selectedIssue = issue
-        appActions.focusNewIssueTitle = true
     }
 }
