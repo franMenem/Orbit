@@ -31,6 +31,7 @@ struct IssueBoardView: View {
             }
             .padding()
         }
+        .background(Nocturne.bg)
     }
 
     private func handleDrop(uuidString: String, to targetStatus: IssueStatus) -> Bool {
@@ -56,56 +57,71 @@ private struct BoardColumn: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: DS.Space.sm) {
-            HStack(spacing: DS.Space.sm) {
+            HStack(spacing: DS.Space.xs) {
                 Image(systemName: status.glyph)
                     .font(.caption)
                     .foregroundStyle(status.color)
                 Text(status.displayName)
-                    .font(.subheadline.weight(.semibold))
+                    .font(Nocturne.Font_.inter(12, .semibold))
+                    .foregroundStyle(Nocturne.text)
                 Spacer()
                 Text("\(issues.count)")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(.secondary)
+                    .font(Nocturne.Font_.chip.weight(.medium))
+                    .foregroundStyle(status.color)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 1)
-                    .background(status.color.opacity(0.14), in: Capsule())
+                    .background(status.tint, in: Capsule())
             }
-            .padding(.horizontal, DS.Space.xs)
+            .padding(.horizontal, 2)
 
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 8) {
-                    ForEach(issues) { issue in
-                        IssueCard(
-                            issue: issue,
-                            isSelected: issue.persistentModelID == selectedIssue?.persistentModelID
-                        )
-                        .draggable(issue.id.uuidString)
-                        .onTapGesture { onSelect(issue) }
-                        .contextMenu {
-                            Menu("Move to") {
-                                ForEach(IssueStatus.allCases.sorted { $0.sortOrder < $1.sortOrder }, id: \.self) { s in
-                                    if s != issue.status {
-                                        Button(s.displayName) { _ = onDrop(issue.id.uuidString) }
+            if issues.isEmpty {
+                emptyDropTarget
+            } else {
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 9) {
+                        ForEach(issues) { issue in
+                            IssueCard(
+                                issue: issue,
+                                isSelected: issue.persistentModelID == selectedIssue?.persistentModelID
+                            )
+                            .draggable(issue.id.uuidString)
+                            .onTapGesture { onSelect(issue) }
+                            .contextMenu {
+                                Menu("Move to") {
+                                    ForEach(IssueStatus.allCases.sorted { $0.sortOrder < $1.sortOrder }, id: \.self) { s in
+                                        if s != issue.status {
+                                            Button(s.displayName) { _ = onDrop(issue.id.uuidString) }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                    .padding(.bottom, 8)
                 }
-                .padding(.bottom, 8)
             }
         }
-        .frame(width: 230)
+        .frame(width: 236)
         .padding(10)
-        .background(isTargeted ? Color.accentColor.opacity(0.06) : Color(nsColor: .windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .background(Nocturne.bgDeep, in: RoundedRectangle(cornerRadius: Nocturne.Radius.column))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(isTargeted ? Color.accentColor : Color(nsColor: .separatorColor), lineWidth: isTargeted ? 1.5 : 0.5)
+            RoundedRectangle(cornerRadius: Nocturne.Radius.column)
+                .stroke(isTargeted ? Nocturne.accent : Color(hex: "#1E2130"), lineWidth: isTargeted ? 1.5 : 1)
         )
         .dropDestination(for: String.self) { items, _ in
             guard let first = items.first else { return false }
             return onDrop(first)
         } isTargeted: { isTargeted = $0 }
+    }
+
+    private var emptyDropTarget: some View {
+        RoundedRectangle(cornerRadius: Nocturne.Radius.row)
+            .strokeBorder(Nocturne.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            .frame(height: 72)
+            .overlay(
+                Text("Arrastrá un issue acá")
+                    .font(Nocturne.Font_.meta)
+                    .foregroundStyle(Nocturne.textFaint)
+            )
     }
 }

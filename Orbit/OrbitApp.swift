@@ -12,6 +12,7 @@ struct OrbitApp: App {
         }
         .modelContainer(ContainerFactory.make())
         #if os(macOS)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             OrbitCommands(actions: appActions)
         }

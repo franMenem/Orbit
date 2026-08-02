@@ -8,6 +8,7 @@ enum SeedData {
         let count = (try? context.fetchCount(FetchDescriptor<Workspace>())) ?? 0
         guard count == 0 else {
             let all = (try? context.fetch(FetchDescriptor<Workspace>())) ?? []
+            backfillMissingCodes(context)
             return all.first?.unwrappedProjects.first
         }
         seedAll(context)
@@ -18,6 +19,21 @@ enum SeedData {
 
     private static func firstProject(_ context: ModelContext) -> Project? {
         (try? context.fetch(FetchDescriptor<Workspace>()))?.first?.unwrappedProjects.first
+    }
+
+    /// Cheap one-time backfill for issues created before `Issue.code` existed
+    /// (older local/CloudKit stores). Only fetches issues with an empty code,
+    /// so on every run after the first this is a no-op query. Runs on the
+    /// existing main context — no separate CloudKit-aware plumbing needed.
+    private static func backfillMissingCodes(_ context: ModelContext) {
+        let predicate = #Predicate<Issue> { $0.code == "" }
+        let issuesWithoutCode = (try? context.fetch(FetchDescriptor(predicate: predicate))) ?? []
+        guard !issuesWithoutCode.isEmpty else { return }
+        for issue in issuesWithoutCode {
+            guard let project = issue.project else { continue }
+            issue.code = Issue.makeCode(for: project)
+        }
+        try? context.save()
     }
 
     private static func seedAll(_ context: ModelContext) {
@@ -238,6 +254,7 @@ enum SeedData {
         issue.priority = priority
         issue.project  = project
         issue.labels   = []
+        issue.code     = Issue.makeCode(for: project)
 
         // Wire many-to-many from both sides
         for label in labels {

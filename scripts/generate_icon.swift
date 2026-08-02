@@ -1,5 +1,7 @@
 #!/usr/bin/env swift
 // Generates Orbit.app icon at exact pixel sizes using CGBitmapContext.
+// Draws the Nocturne sidebar mark (orbit ellipse + core + satellite) over a
+// deep-space background, matching Orbit/Views/Sidebar/OrbitLogo.swift.
 // Run with: swift scripts/generate_icon.swift
 import AppKit
 import CoreGraphics
@@ -11,6 +13,12 @@ let outputDir = "Orbit/Assets.xcassets/AppIcon.appiconset"
 func cgColor(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat, _ a: CGFloat = 1) -> CGColor {
     CGColor(red: r/255, green: g/255, blue: b/255, alpha: a)
 }
+
+// Nocturne palette used by the mark: accent #9184D9, accent-300 #D2CEFD,
+// background #12131F (Nocturne.bgDeep).
+let accentRGB: (CGFloat, CGFloat, CGFloat) = (145, 132, 217)   // #9184D9
+let satelliteRGB: (CGFloat, CGFloat, CGFloat) = (210, 206, 253) // #D2CEFD
+let bgRGB: (CGFloat, CGFloat, CGFloat) = (18, 19, 31)           // #12131F
 
 /// Returns a CGImage drawn at exactly `pixelSize` x `pixelSize` pixels.
 func makeIcon(pixelSize: Int) -> CGImage? {
@@ -27,125 +35,55 @@ func makeIcon(pixelSize: Int) -> CGImage? {
     let s = CGFloat(pixelSize)
     let cx = s / 2
     let cy = s / 2
+    let u = s / 1024 // unit scale, so proportions match across all sizes
 
-    // ── 1. Background: deep space radial gradient ─────────────────────────────
-    let bgColors = [cgColor(12, 8, 35), cgColor(22, 14, 58), cgColor(10, 6, 28)] as CFArray
-    let bgLocs: [CGFloat] = [0, 0.45, 1]
-    let bgGrad = CGGradient(colorsSpace: cs, colors: bgColors, locations: bgLocs)!
-    ctx.drawRadialGradient(bgGrad,
-        startCenter: CGPoint(x: cx, y: cy), startRadius: 0,
-        endCenter:   CGPoint(x: cx, y: cy * 0.65), endRadius: s * 0.78,
-        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
+    // ── 1. Background: flat Nocturne.bgDeep with a very subtle vignette ──────
+    ctx.setFillColor(cgColor(bgRGB.0, bgRGB.1, bgRGB.2))
+    ctx.fill(CGRect(x: 0, y: 0, width: s, height: s))
 
-    // ── 2. Deterministic star field ───────────────────────────────────────────
-    var seed: UInt64 = 0xdeadbeef1234abcd
-    func nextRand() -> CGFloat {
-        seed = seed &* 6364136223846793005 &+ 1442695040888963407
-        return CGFloat(seed >> 33) / CGFloat(1 << 31)
-    }
-    let starCount = pixelSize > 128 ? 80 : (pixelSize > 32 ? 30 : 8)
-    for _ in 0..<starCount {
-        let sx  = nextRand() * s
-        let sy  = nextRand() * s
-        let sr  = nextRand() * (s * 0.0025) + (s * 0.0008)
-        let al  = nextRand() * 0.5 + 0.2
-        ctx.setFillColor(cgColor(200, 215, 255, al))
-        ctx.fillEllipse(in: CGRect(x: sx-sr, y: sy-sr, width: sr*2, height: sr*2))
+    let vignetteColors = [
+        cgColor(accentRGB.0, accentRGB.1, accentRGB.2, 0.10),
+        cgColor(bgRGB.0, bgRGB.1, bgRGB.2, 0.0)
+    ] as CFArray
+    if let vignette = CGGradient(colorsSpace: cs, colors: vignetteColors, locations: [0, 1]) {
+        ctx.drawRadialGradient(vignette,
+            startCenter: CGPoint(x: cx, y: cy), startRadius: 0,
+            endCenter: CGPoint(x: cx, y: cy), endRadius: s * 0.62,
+            options: [.drawsAfterEndLocation])
     }
 
-    // ── 3. Helper: draw orbit ellipse with glow ───────────────────────────────
-    func drawOrbit(rx: CGFloat, ry: CGFloat, angle: CGFloat,
-                   color: CGColor, lineWidth: CGFloat, alpha: CGFloat) {
-        ctx.saveGState()
-        ctx.translateBy(x: cx, y: cy)
-        ctx.rotate(by: angle)
-        let rect = CGRect(x: -rx, y: -ry, width: rx*2, height: ry*2)
+    // ── 2. Orbit ellipse — rx 10.5 / ry 5 on a 24×24 viewBox, rotated -28° ────
+    // Scaled up to the icon's own coordinate space (viewBox unit = s/24).
+    let vb = s / 24
+    let rx = 10.5 * vb
+    let ry = 5.0 * vb
+    let rotation = -28 * CGFloat.pi / 180
+    let orbitLineWidth = max(1.4 * vb, 3 * u)
 
-        // Glow
-        ctx.setStrokeColor(color.copy(alpha: alpha * 0.22)!)
-        ctx.setLineWidth(lineWidth * 4)
-        ctx.addEllipse(in: rect); ctx.strokePath()
-        // Mid glow
-        ctx.setStrokeColor(color.copy(alpha: alpha * 0.40)!)
-        ctx.setLineWidth(lineWidth * 2)
-        ctx.addEllipse(in: rect); ctx.strokePath()
-        // Core line
-        ctx.setStrokeColor(color.copy(alpha: alpha)!)
-        ctx.setLineWidth(lineWidth)
-        ctx.addEllipse(in: rect); ctx.strokePath()
-
-        ctx.restoreGState()
-    }
-
-    let u = s / 1024  // unit scale
-    let rw = max(1.5, 5.5 * u)
-
-    // Outer orbit — electric blue
-    drawOrbit(rx: 370*u, ry: 150*u, angle: -.pi / 9,
-              color: cgColor(70, 155, 255), lineWidth: rw * 1.5, alpha: 0.78)
-    // Inner orbit — violet
-    drawOrbit(rx: 205*u, ry: 88*u, angle: .pi / 7.5,
-              color: cgColor(150, 95, 255), lineWidth: rw * 1.1, alpha: 0.68)
-
-    // ── 4. Satellite on outer orbit ───────────────────────────────────────────
-    let orbitT: CGFloat  = -.pi * 0.21
-    let tiltOut: CGFloat = -.pi / 9
-    let rawX = cos(orbitT) * 370 * u
-    let rawY = sin(orbitT) * 150 * u
-    let satX = cx + rawX * cos(tiltOut) - rawY * sin(tiltOut)
-    let satY = cy + rawX * sin(tiltOut) + rawY * cos(tiltOut)
-    let satR = 22 * u
-
-    // Satellite halo
-    ctx.setFillColor(cgColor(255, 110, 80, 0.20))
-    ctx.fillEllipse(in: CGRect(x: satX-satR*2.5, y: satY-satR*2.5, width: satR*5, height: satR*5))
-    // Satellite body
-    let satC = [cgColor(255, 185, 145), cgColor(255, 80, 55)] as CFArray
-    let satG  = CGGradient(colorsSpace: cs, colors: satC, locations: nil)!
     ctx.saveGState()
-    ctx.addEllipse(in: CGRect(x: satX-satR, y: satY-satR, width: satR*2, height: satR*2))
-    ctx.clip()
-    ctx.drawLinearGradient(satG,
-        start: CGPoint(x: satX-satR, y: satY+satR),
-        end:   CGPoint(x: satX+satR, y: satY-satR), options: [])
+    ctx.translateBy(x: cx, y: cy)
+    ctx.rotate(by: rotation)
+    let orbitRect = CGRect(x: -rx, y: -ry, width: rx * 2, height: ry * 2)
+    ctx.setStrokeColor(cgColor(accentRGB.0, accentRGB.1, accentRGB.2))
+    ctx.setLineWidth(orbitLineWidth)
+    ctx.addEllipse(in: orbitRect)
+    ctx.strokePath()
     ctx.restoreGState()
 
-    // ── 5. Central planet ─────────────────────────────────────────────────────
-    let pr = 88 * u
+    // ── 3. Central core — r 3.4 (viewBox units), filled accent ───────────────
+    let coreR = 3.4 * vb
+    ctx.setFillColor(cgColor(accentRGB.0, accentRGB.1, accentRGB.2))
+    ctx.fillEllipse(in: CGRect(x: cx - coreR, y: cy - coreR, width: coreR * 2, height: coreR * 2))
 
-    // Outer aura
-    let auraColors = [cgColor(50, 130, 255, 0.0), cgColor(50, 130, 255, 0.15), cgColor(50, 130, 255, 0.0)] as CFArray
-    let auraLocs: [CGFloat] = [0, 0.5, 1]
-    let auraGrad = CGGradient(colorsSpace: cs, colors: auraColors, locations: auraLocs)!
-    ctx.drawRadialGradient(auraGrad,
-        startCenter: CGPoint(x: cx, y: cy), startRadius: pr * 0.8,
-        endCenter:   CGPoint(x: cx, y: cy), endRadius: pr * 2.8,
-        options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-
-    // Planet body with radial gradient
-    let pColors = [cgColor(155, 210, 255), cgColor(55, 118, 245), cgColor(18, 55, 175)] as CFArray
-    let pLocs: [CGFloat] = [0, 0.5, 1]
-    let pGrad  = CGGradient(colorsSpace: cs, colors: pColors, locations: pLocs)!
-    ctx.saveGState()
-    ctx.addEllipse(in: CGRect(x: cx-pr, y: cy-pr, width: pr*2, height: pr*2))
-    ctx.clip()
-    ctx.drawRadialGradient(pGrad,
-        startCenter: CGPoint(x: cx - pr*0.22, y: cy + pr*0.22), startRadius: 0,
-        endCenter:   CGPoint(x: cx, y: cy), endRadius: pr,
-        options: [.drawsAfterEndLocation])
-    ctx.restoreGState()
-
-    // Specular highlight
-    let specC = [cgColor(255, 255, 255, 0.60), cgColor(255, 255, 255, 0.0)] as CFArray
-    let specG  = CGGradient(colorsSpace: cs, colors: specC, locations: nil)!
-    ctx.saveGState()
-    ctx.addEllipse(in: CGRect(x: cx-pr, y: cy-pr, width: pr*2, height: pr*2))
-    ctx.clip()
-    ctx.drawRadialGradient(specG,
-        startCenter: CGPoint(x: cx - pr*0.28, y: cy + pr*0.32), startRadius: 0,
-        endCenter:   CGPoint(x: cx - pr*0.28, y: cy + pr*0.32), endRadius: pr * 0.60,
-        options: [.drawsAfterEndLocation])
-    ctx.restoreGState()
+    // ── 4. Satellite — r 1.9, riding the orbit rim, accent-300 fill ──────────
+    let satelliteAngle: CGFloat = -.pi / 5
+    let rawX = cos(satelliteAngle) * rx
+    let rawY = sin(satelliteAngle) * ry
+    let satX = cx + rawX * cos(rotation) - rawY * sin(rotation)
+    let satY = cy + rawX * sin(rotation) + rawY * cos(rotation)
+    let satR = 1.9 * vb
+    ctx.setFillColor(cgColor(satelliteRGB.0, satelliteRGB.1, satelliteRGB.2))
+    ctx.fillEllipse(in: CGRect(x: satX - satR, y: satY - satR, width: satR * 2, height: satR * 2))
 
     return ctx.makeImage()
 }

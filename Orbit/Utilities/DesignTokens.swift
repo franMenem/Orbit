@@ -17,25 +17,37 @@ enum DS {
         static let chip: CGFloat      = 6
         static let control: CGFloat   = 8
         static let container: CGFloat = 10
+        static let sheet: CGFloat     = 14
     }
 }
 
 // MARK: - IssueStatus visual style
 
 extension IssueStatus {
-    /// Semantic tint — communicates state at a glance. SwiftUI system colors
-    /// adapt to light/dark automatically.
+    /// Nocturne ramp — intensity, not hue, communicates progress.
     var color: Color {
         switch self {
-        case .backlog:    .secondary
-        case .todo:       .blue
-        case .inProgress: .orange
-        case .done:       .green
-        case .cancelled:  .pink
+        case .backlog:    Color(hex: "#75798C")
+        case .todo:       Color(hex: "#CFD3E5")
+        case .inProgress: Color(hex: "#9184D9")
+        case .done:       Color(hex: "#B5ABFC")
+        case .cancelled:  Color(hex: "#595D6C")
         }
     }
 
-    /// Linear-style progress glyph for the status.
+    /// Background tint for the status pill.
+    var tint: Color {
+        switch self {
+        case .backlog:    color.opacity(0.16)
+        case .todo:       color.opacity(0.12)
+        case .inProgress: color.opacity(0.16)
+        case .done:       color.opacity(0.14)
+        case .cancelled:  color.opacity(0.16)
+        }
+    }
+
+    /// Linear-style progress glyph for the status. Unchanged by the Nocturne
+    /// redesign — only colors moved.
     var glyph: String {
         switch self {
         case .backlog:    "circle.dashed"
@@ -50,14 +62,25 @@ extension IssueStatus {
 // MARK: - IssuePriority visual style
 
 extension IssuePriority {
-    /// Single source of truth for priority color (was duplicated in IssueRow/IssueCard).
+    /// Nocturne signal-bars color — replaces the old colored arrows.
     var color: Color {
         switch self {
-        case .urgent: .red
-        case .high:   .orange
-        case .medium: .yellow
-        case .low:    .blue
-        case .none:   .secondary
+        case .none:   Color(hex: "#4D5060")
+        case .low:    Color(hex: "#75798C")
+        case .medium: Color(hex: "#B2B6CA")
+        case .high:   Color(hex: "#9184D9")
+        case .urgent: Color(hex: "#E8415B")
+        }
+    }
+
+    /// Number of active bars in the `PriorityBars` signal mark.
+    var barCount: Int {
+        switch self {
+        case .none:   0
+        case .low:    1
+        case .medium: 2
+        case .high:   3
+        case .urgent: 3
         }
     }
 }

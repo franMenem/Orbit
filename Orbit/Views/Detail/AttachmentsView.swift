@@ -4,6 +4,10 @@ import UniformTypeIdentifiers
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MARK: - AttachmentsView
+// Nocturne restyle: attachments render as a vertical list of rows (border
+// #232532, radius 8, padding 8/10 — icon + filename 12pt + size 11pt
+// Nocturne.textFaint) instead of the previous thumbnail grid. All attach/
+// remove/preview/drag-drop logic is unchanged.
 // ─────────────────────────────────────────────────────────────────────────────
 
 struct AttachmentsView: View {
@@ -14,76 +18,72 @@ struct AttachmentsView: View {
     @State private var showFilePicker  = false
     @State private var preview: Attachment? = nil
 
+    /// One-off from the design spec, not in the Nocturne token set: the
+    /// attachment row border (`#232532`).
+    private let rowBorder = Color(hex: "#232532")
+
     var attachments: [Attachment] {
         (issue.attachments ?? []).sorted { $0.createdAt < $1.createdAt }
     }
 
-    // Adaptive grid: min 100px per card, fills available width
-    let columns = [GridItem(.adaptive(minimum: 100, maximum: 150), spacing: 10)]
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
 
             // ── Header ────────────────────────────────────────────────────
             HStack {
                 if !attachments.isEmpty {
                     Text("\(attachments.count) file\(attachments.count == 1 ? "" : "s")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Nocturne.Font_.chip)
+                        .foregroundStyle(Nocturne.textDim)
                 }
                 Spacer()
                 Button {
                     showFilePicker = true
                 } label: {
                     SwiftUI.Label("Add Files", systemImage: "plus")
-                        .font(.caption.weight(.medium))
+                        .font(Nocturne.Font_.chip)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(.plain)
+                .foregroundStyle(Nocturne.textDim)
             }
 
-            // ── Drop zone / grid ──────────────────────────────────────────
+            // ── Drop zone / rows ──────────────────────────────────────────
             ZStack {
-                // Background + border
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isDragTargeted
-                          ? Color.accentColor.opacity(0.08)
-                          : Color.primary.opacity(0.03))
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(
-                        isDragTargeted ? Color.accentColor : Color.primary.opacity(0.12),
-                        style: StrokeStyle(lineWidth: isDragTargeted ? 2 : 1, dash: isDragTargeted ? [] : [5, 4])
-                    )
-                    .animation(.easeInOut(duration: 0.15), value: isDragTargeted)
-
                 if attachments.isEmpty {
-                    // Empty state
-                    VStack(spacing: 8) {
-                        Image(systemName: isDragTargeted ? "arrow.down.circle.fill" : "paperclip.circle")
-                            .font(.system(size: 28))
-                            .foregroundStyle(isDragTargeted ? Color.accentColor : Color.secondary.opacity(0.5))
+                    // Empty state — dashed Nocturne box.
+                    RoundedRectangle(cornerRadius: Nocturne.Radius.row)
+                        .fill(isDragTargeted ? Nocturne.accentTint : Color.clear)
+                    RoundedRectangle(cornerRadius: Nocturne.Radius.row)
+                        .strokeBorder(
+                            isDragTargeted ? Nocturne.accent : Nocturne.dashed,
+                            style: StrokeStyle(lineWidth: isDragTargeted ? 1.5 : 1, dash: isDragTargeted ? [] : [4, 3])
+                        )
+                        .animation(.easeInOut(duration: 0.15), value: isDragTargeted)
+
+                    VStack(spacing: 6) {
+                        Image(systemName: isDragTargeted ? "arrow.down.circle" : "paperclip")
+                            .font(.system(size: 20))
+                            .foregroundStyle(isDragTargeted ? Nocturne.accent : Nocturne.textFaint)
                             .animation(.easeInOut(duration: 0.15), value: isDragTargeted)
                         Text(isDragTargeted ? "Release to attach" : "Drop files or click Add Files")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(Nocturne.Font_.chip)
+                            .foregroundStyle(Nocturne.textDim)
                     }
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 24)
+                    .padding(.vertical, 20)
                 } else {
-                    // File grid
-                    LazyVGrid(columns: columns, spacing: 10) {
+                    VStack(spacing: 6) {
                         ForEach(attachments) { att in
-                            AttachmentCard(
+                            AttachmentRow(
                                 attachment: att,
+                                borderColor: rowBorder,
                                 onPreview: { preview = att },
                                 onRemove:  { remove(att) }
                             )
                         }
                     }
-                    .padding(12)
                 }
             }
-            .frame(minHeight: attachments.isEmpty ? 80 : nil)
             // Drag & drop from Finder
             .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDragTargeted) { providers in
                 for provider in providers {
@@ -137,84 +137,61 @@ struct AttachmentsView: View {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MARK: - AttachmentCard
+// MARK: - AttachmentRow
+// Nocturne row: border #232532, radius 8, padding 8/10, paperclip icon,
+// filename 12pt, size 11pt Nocturne.textFaint. Remove button appears on hover.
 // ─────────────────────────────────────────────────────────────────────────────
 
-private struct AttachmentCard: View {
+private struct AttachmentRow: View {
     let attachment: Attachment
+    let borderColor: Color
     let onPreview: () -> Void
     let onRemove:  () -> Void
 
     @State private var isHovered = false
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // Card body
-            Button(action: tap) {
-                VStack(spacing: 0) {
-                    // ── Thumbnail / icon area ─────────────────────────────
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(iconBackgroundColor.opacity(0.12))
-                            .frame(height: 80)
+        HStack(spacing: 8) {
+            Image(systemName: "paperclip")
+                .font(.system(size: 12))
+                .foregroundStyle(Nocturne.textDim)
 
-                        if attachment.isImage,
-                           let data = attachment.data,
-                           let img  = NSImage(data: data) {
-                            Image(nsImage: img)
-                                .resizable()
-                                .scaledToFill()
-                                .frame(height: 80)
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                        } else {
-                            Image(systemName: fileSymbol)
-                                .font(.system(size: 28))
-                                .foregroundStyle(iconBackgroundColor)
-                        }
-                    }
+            Text(attachment.filename)
+                .font(Nocturne.Font_.inter(12))
+                .foregroundStyle(Nocturne.textMuted)
+                .lineLimit(1)
+                .truncationMode(.middle)
 
-                    // ── Filename + size ───────────────────────────────────
-                    VStack(spacing: 2) {
-                        Text(attachment.filename)
-                            .font(.caption2.weight(.medium))
-                            .lineLimit(2)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(.primary)
+            Spacer(minLength: 8)
 
-                        Text(attachment.fileSizeString)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 6)
-                }
-            }
-            .buttonStyle(.plain)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.primary.opacity(isHovered ? 0.06 : 0.03))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
-            )
+            Text(attachment.fileSizeString)
+                .font(Nocturne.Font_.inter(11))
+                .foregroundStyle(Nocturne.textFaint)
 
-            // ── Delete button — visible on hover ─────────────────────────
             if isHovered {
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill")
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.white, Color.secondary)
-                        .font(.system(size: 16))
+                        .font(.system(size: 13))
+                        .foregroundStyle(Nocturne.textFaint)
                 }
                 .buttonStyle(.plain)
-                .offset(x: 6, y: -6)
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 .help("Remove")
             }
         }
-        .animation(.easeInOut(duration: 0.12), value: isHovered)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: Nocturne.Radius.row)
+                .fill(isHovered ? Nocturne.surface : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: Nocturne.Radius.row)
+                .stroke(borderColor, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { tap() }
         .onHover { isHovered = $0 }
+        .animation(.easeInOut(duration: 0.12), value: isHovered)
     }
 
     private func tap() {
@@ -228,43 +205,6 @@ private struct AttachmentCard: View {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try? data.write(to: tmp)
         NSWorkspace.shared.open(tmp)
-    }
-
-    // ── Visual metadata ───────────────────────────────────────────────────
-
-    private var fileSymbol: String {
-        let ct = attachment.contentType
-        if ct.contains("pdf")                        { return "doc.richtext.fill" }
-        if ct.contains("video")                      { return "play.rectangle.fill" }
-        if ct.contains("audio")                      { return "waveform" }
-        if ct.contains("zip") || ct.contains("archive") { return "archivebox.fill" }
-        if ct.contains("spreadsheet") || ct.contains("excel") || ct.contains("numbers") {
-            return "tablecells.fill"
-        }
-        if ct.contains("presentation") || ct.contains("keynote") || ct.contains("powerpoint") {
-            return "chart.bar.doc.horizontal.fill"
-        }
-        if ct.contains("text") || ct.contains("word") || ct.contains("pages") {
-            return "doc.text.fill"
-        }
-        if ct.contains("image")                      { return "photo.fill" }
-        return "doc.fill"
-    }
-
-    private var iconBackgroundColor: Color {
-        let ct = attachment.contentType
-        if ct.contains("pdf")                        { return .red }
-        if ct.contains("video")                      { return .purple }
-        if ct.contains("audio")                      { return .orange }
-        if ct.contains("zip") || ct.contains("archive") { return .yellow }
-        if ct.contains("spreadsheet") || ct.contains("excel") || ct.contains("numbers") {
-            return .green
-        }
-        if ct.contains("presentation") || ct.contains("keynote") || ct.contains("powerpoint") {
-            return .orange }
-        if ct.contains("text") || ct.contains("word") || ct.contains("pages") {
-            return .blue }
-        return .secondary
     }
 }
 
@@ -282,27 +222,27 @@ private struct ImagePreviewSheet: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(attachment.filename)
-                        .font(.headline)
+                        .font(Nocturne.Font_.inter(13, .medium))
+                        .foregroundStyle(Nocturne.text)
                     Text(attachment.fileSizeString)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(Nocturne.Font_.chip)
+                        .foregroundStyle(Nocturne.textDim)
                 }
                 Spacer()
                 Button {
                     openInDefaultApp()
                 } label: {
                     SwiftUI.Label("Open", systemImage: "arrow.up.right.square")
+                        .font(Nocturne.Font_.control)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
+                .buttonStyle(OutlineAccentButtonStyle())
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
+                    .buttonStyle(OutlineAccentButtonStyle())
             }
             .padding(16)
 
-            Divider()
+            Rectangle().fill(Nocturne.border).frame(height: 1)
 
             // Image
             if let data = attachment.data, let img = NSImage(data: data) {
@@ -319,7 +259,7 @@ private struct ImagePreviewSheet: View {
             }
         }
         .frame(minWidth: 480, minHeight: 360)
-        .background(.background)
+        .background(Nocturne.surface)
     }
 
     private func openInDefaultApp() {
