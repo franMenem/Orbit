@@ -71,11 +71,24 @@ enum Nocturne {
     // MARK: Type
 
     enum Font_ {
-        // Inter no está empaquetada todavía; usamos SF Pro (.system) como
-        // fallback aceptado por el README. Reemplazar por `.custom("Inter", ...)`
-        // cuando la fuente se empaquete en el bundle.
+        // Inter está empaquetada en Orbit/Fonts (400/500/600, TTF estáticos) y
+        // registrada vía INFOPLIST_KEY_ATSApplicationFontsPath. Los nombres
+        // PostScript de esos TTF son Inter-Regular / Inter-Medium /
+        // Inter-SemiBold; cualquier otro peso solicitado cae al más cercano
+        // de esos tres.
         static func inter(_ size: CGFloat, _ weight: SwiftUI.Font.Weight = .regular) -> SwiftUI.Font {
-            .system(size: size, weight: weight)
+            .custom(postScriptName(for: weight), size: size)
+        }
+
+        private static func postScriptName(for weight: SwiftUI.Font.Weight) -> String {
+            switch weight {
+            case .black, .heavy, .bold, .semibold:
+                return "Inter-SemiBold"
+            case .medium:
+                return "Inter-Medium"
+            default:
+                return "Inter-Regular"
+            }
         }
         static let projectTitle = inter(21, .medium)
         static let issueTitle   = inter(19, .medium)
