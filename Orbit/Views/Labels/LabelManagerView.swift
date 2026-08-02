@@ -12,36 +12,66 @@ struct LabelManagerView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
+            HStack(spacing: 8) {
+                Image(systemName: "tag")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Nocturne.accent)
                 Text("Manage Labels")
-                    .font(.headline)
+                    .font(Nocturne.Font_.inter(15, .semibold))
+                    .foregroundStyle(Nocturne.text)
                 Spacer()
                 Button("Done") { dismiss() }
+                    .buttonStyle(OutlineNeutralButtonStyle())
             }
-            .padding()
-            Divider()
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.vertical, DS.Space.md)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Nocturne.border).frame(height: 1)
+            }
 
             // Existing labels
-            List {
-                ForEach(workspace.unwrappedLabels) { label in
-                    LabelRow(label: label, onDelete: { labelToDelete = label })
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(workspace.unwrappedLabels) { label in
+                        LabelRow(label: label, onDelete: { labelToDelete = label })
+                        if label.id != workspace.unwrappedLabels.last?.id {
+                            Rectangle().fill(Nocturne.rowLine).frame(height: 1)
+                        }
+                    }
                 }
             }
-            .frame(minHeight: 200)
-
-            Divider()
+            .frame(minHeight: 220)
+            .background(Nocturne.surface)
 
             // Add new label
             HStack(spacing: 8) {
                 ColorPaletteButton(selectedHex: $newLabelColorHex)
                 TextField("New label name", text: $newLabelName)
-                    .textFieldStyle(.roundedBorder)
+                    .textFieldStyle(.plain)
+                    .font(Nocturne.Font_.control)
+                    .foregroundStyle(Nocturne.text)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(Nocturne.bg)
+                    .clipShape(RoundedRectangle(cornerRadius: Nocturne.Radius.control))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Nocturne.Radius.control)
+                            .stroke(Nocturne.border, lineWidth: 1)
+                    )
+                    .onSubmit { addLabel() }
                 Button("Add") { addLabel() }
+                    .buttonStyle(OutlineAccentButtonStyle())
                     .disabled(newLabelName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .padding()
+            .padding(DS.Space.lg)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Nocturne.border).frame(height: 1)
+            }
         }
-        .frame(width: 380, height: 440)
+        .frame(width: 460, height: 480)
+        .background(Nocturne.surface)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sheet))
+        .nocturneElevation(.sheet)
         .confirmationDialog(
             "Delete \"\(labelToDelete?.name ?? "")\"?",
             isPresented: Binding(get: { labelToDelete != nil }, set: { if !$0 { labelToDelete = nil } }),
@@ -80,7 +110,8 @@ private struct LabelRow: View {
     @Bindable var label: Orbit.Label
     let onDelete: () -> Void
     @Environment(\.modelContext) private var context
-    @State private var isEditingColor = false
+    @FocusState private var nameFocused: Bool
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -89,15 +120,32 @@ private struct LabelRow: View {
                 set: { label.colorHex = $0; try? context.save() }
             ))
             TextField("Label name", text: $label.name)
+                .textFieldStyle(.plain)
+                .font(Nocturne.Font_.inter(13))
+                .foregroundStyle(Nocturne.text)
+                .focused($nameFocused)
                 .onSubmit { try? context.save() }
             Spacer()
-            LabelChip(name: label.name, colorHex: label.colorHex)
-            Button(role: .destructive, action: onDelete) {
-                Image(systemName: "trash")
+            Text("\(label.issues?.count ?? 0)")
+                .font(Nocturne.Font_.meta)
+                .foregroundStyle(Nocturne.textFaint)
+            Button { nameFocused = true } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Nocturne.Neutral.n700)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.red)
+            Button(action: onDelete) {
+                Image(systemName: "trash")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Nocturne.Neutral.n700)
+            }
+            .buttonStyle(.plain)
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
+        .background(isHovering ? Nocturne.surfaceHi : Color.clear)
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -109,9 +157,9 @@ struct ColorPaletteButton: View {
         Button {
             showPopover = true
         } label: {
-            Circle()
+            RoundedRectangle(cornerRadius: 3)
                 .fill(Color(hex: selectedHex))
-                .frame(width: 18, height: 18)
+                .frame(width: 10, height: 10)
         }
         .buttonStyle(.plain)
         .popover(isPresented: $showPopover) {
@@ -133,16 +181,16 @@ private struct ColorPalettePopover: View {
                     Circle()
                         .fill(Color(hex: item.hex))
                         .frame(width: 28, height: 28)
-                        .overlay(Circle().stroke(Color.primary, lineWidth: selectedHex == item.hex ? 2 : 0))
+                        .overlay(Circle().stroke(Nocturne.accent, lineWidth: selectedHex == item.hex ? 2 : 0))
                         .onTapGesture {
                             selectedHex = item.hex
                             isPresented = false
                         }
                 }
             }
-            Divider()
+            Rectangle().fill(Nocturne.border).frame(height: 1)
             HStack {
-                Text("Custom").font(.caption)
+                Text("Custom").font(.caption).foregroundStyle(Nocturne.textDim)
                 Spacer()
                 ColorPicker("", selection: $customColor, supportsOpacity: false)
                     .labelsHidden()
@@ -154,5 +202,6 @@ private struct ColorPalettePopover: View {
         }
         .padding(12)
         .frame(width: 180)
+        .background(Nocturne.surface)
     }
 }

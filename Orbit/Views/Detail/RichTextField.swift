@@ -12,6 +12,11 @@ struct RichTextField: View {
     @Binding var text: String
     var placeholder: String = "Add text…"
     var minHeight: CGFloat = 90
+    /// When true, the empty-state editor box uses a dashed Nocturne border
+    /// instead of the normal solid one — used by the Solution section, whose
+    /// empty state reads as an inert placeholder box rather than an active
+    /// input, per the Nocturne spec.
+    var dashedWhenEmpty: Bool = false
     var onCommit: () -> Void = {}
 
     @State private var isEditing = false
@@ -31,10 +36,10 @@ struct RichTextField: View {
                             isEditing ? "Preview" : "Edit",
                             systemImage: isEditing ? "eye" : "pencil"
                         )
-                        .font(.caption2)
+                        .font(Nocturne.Font_.chip)
                     }
                     .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Nocturne.textDim)
                 }
             }
 
@@ -48,23 +53,34 @@ struct RichTextField: View {
 
     // MARK: - Editor
 
+    private var isDashedEmpty: Bool { dashedWhenEmpty && text.isEmpty }
+
+    private var emptyBoxBorderColor: Color {
+        if focused { return Nocturne.accent }
+        return isDashedEmpty ? Nocturne.dashed : Nocturne.border
+    }
+
     private var editor: some View {
         TextEditor(text: $text)
             .focused($focused)
-            .font(.body)
+            .font(Nocturne.Font_.body)
+            .foregroundStyle(Nocturne.text)
             .scrollContentBackground(.hidden)
             .padding(10)
             .frame(minHeight: minHeight)
-            .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+            .background(isDashedEmpty ? Color.clear : Nocturne.surface, in: RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(focused ? Color.accentColor.opacity(0.5) : Color.primary.opacity(0.08),
-                                  lineWidth: focused ? 1.5 : 1)
+                    .strokeBorder(
+                        emptyBoxBorderColor,
+                        style: StrokeStyle(lineWidth: focused ? 1.5 : 1, dash: isDashedEmpty ? [4, 3] : [])
+                    )
             )
             .overlay(alignment: .topLeading) {
                 if text.isEmpty {
                     Text(placeholder)
-                        .foregroundStyle(.tertiary)
+                        .font(Nocturne.Font_.body)
+                        .foregroundStyle(Nocturne.textFaint)
                         .padding(.horizontal, 15)
                         .padding(.vertical, 18)
                         .allowsHitTesting(false)
@@ -79,8 +95,6 @@ struct RichTextField: View {
     private var preview: some View {
         MarkdownText(text)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(10)
-            .background(Color.primary.opacity(0.03), in: RoundedRectangle(cornerRadius: 8))
             .contentShape(Rectangle())
             .onTapGesture {
                 isEditing = true
@@ -124,19 +138,37 @@ struct MarkdownText: View {
             case .heading(let s, let level):
                 inline(s)
                     .font(headingFont(level))
+                    .foregroundStyle(Nocturne.text)
                     .padding(.top, level <= 2 ? 4 : 2)
             case .bullet(let s):
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("•").foregroundStyle(.secondary)
+                // Nocturne bullet: 4px dot in accentDeep + 12.5pt/1.6 textMuted body.
+                HStack(alignment: .top, spacing: 8) {
+                    Circle()
+                        .fill(Nocturne.accentDeep)
+                        .frame(width: 4, height: 4)
+                        .padding(.top, 6.5)
                     inline(s)
+                        .font(Nocturne.Font_.control)
+                        .foregroundStyle(Nocturne.textMuted)
+                        .lineSpacing(4)
                 }
             case .numbered(let s, let n):
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text("\(n).").foregroundStyle(.secondary).monospacedDigit()
+                HStack(alignment: .top, spacing: 8) {
+                    Text("\(n).")
+                        .font(Nocturne.Font_.control)
+                        .foregroundStyle(Nocturne.accentDeep)
+                        .monospacedDigit()
                     inline(s)
+                        .font(Nocturne.Font_.control)
+                        .foregroundStyle(Nocturne.textMuted)
+                        .lineSpacing(4)
                 }
             case .paragraph(let s):
+                // Detail body: 13pt, line-height ~1.65, Nocturne.Neutral.n300.
                 inline(s)
+                    .font(Nocturne.Font_.body)
+                    .foregroundStyle(Nocturne.Neutral.n300)
+                    .lineSpacing(8.5)
             case .spacer:
                 Spacer().frame(height: 4)
             }
@@ -144,9 +176,9 @@ struct MarkdownText: View {
 
         private func headingFont(_ level: Int) -> Font {
             switch level {
-            case 1: .title2.bold()
-            case 2: .title3.bold()
-            default: .headline
+            case 1: Nocturne.Font_.inter(17, .medium)
+            case 2: Nocturne.Font_.inter(15, .medium)
+            default: Nocturne.Font_.inter(13.5, .medium)
             }
         }
 

@@ -25,34 +25,61 @@ struct CommandPaletteView: View {
             // Search field
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Nocturne.textDim)
                 TextField("Search commands or type to create an issue…", text: $query)
                     .textFieldStyle(.plain)
-                    .font(.title3)
+                    .font(Nocturne.Font_.inter(14))
+                    .foregroundStyle(Nocturne.text)
                     .focused($isQueryFocused)
                     .onKeyPress(.upArrow)   { moveSelection(-1); return .handled }
                     .onKeyPress(.downArrow) { moveSelection(+1); return .handled }
                     .onKeyPress(.escape)    { dismiss();         return .handled }
                     .onKeyPress(.return)    { execute();         return .handled }
                     .onChange(of: query) { selectedIndex = 0 }
+                Text("esc")
+                    .font(Nocturne.Font_.inter(10))
+                    .foregroundStyle(Nocturne.textFaint)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Nocturne.border, lineWidth: 1)
+                    )
             }
-            .padding(16)
-
-            Divider()
+            .padding(DS.Space.lg)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Nocturne.border).frame(height: 1)
+            }
 
             // Results
             if commands.isEmpty {
-                ContentUnavailableView("No commands", systemImage: "magnifyingglass")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 20))
+                        .foregroundStyle(Nocturne.Neutral.n800)
+                    Text("No commands")
+                        .font(Nocturne.Font_.control)
+                        .foregroundStyle(Nocturne.textDim)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.vertical, 40)
             } else {
                 ScrollViewReader { proxy in
-                    List(commands) { command in
-                        CommandRow(command: command, isSelected: commands.firstIndex(where: { $0.id == command.id }) == selectedIndex)
-                            .id(command.id)
-                            .contentShape(Rectangle())
-                            .onTapGesture { execute(command) }
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            ForEach(commands) { command in
+                                CommandRow(
+                                    command: command,
+                                    isSelected: commands.firstIndex(where: { $0.id == command.id }) == selectedIndex
+                                )
+                                .id(command.id)
+                                .contentShape(Rectangle())
+                                .onTapGesture { execute(command) }
+                            }
+                        }
+                        .padding(6)
                     }
-                    .listStyle(.plain)
                     .onChange(of: selectedIndex) {
                         if selectedIndex < commands.count {
                             proxy.scrollTo(commands[selectedIndex].id, anchor: .center)
@@ -61,6 +88,13 @@ struct CommandPaletteView: View {
                 }
             }
         }
+        // Explicit height: now that RootSplitView no longer wraps this sheet in
+        // an outer .frame, the ScrollView inside has no intrinsic height to
+        // report, so macOS would otherwise collapse the sheet to a sliver.
+        .frame(width: 420, height: 440)
+        .background(Nocturne.surface)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sheet))
+        .nocturneElevation(.sheet)
         .onAppear { isQueryFocused = true }
     }
 
@@ -84,25 +118,50 @@ private struct CommandRow: View {
     let command: PaletteCommand
     let isSelected: Bool
 
+    // CommandRegistry reuses `subtitle` to carry the keyboard shortcut for the
+    // view-mode switch commands ("⌘1" / "⌘2") since it has no separate
+    // shortcut field. We can't change CommandRegistry's API here, so this
+    // view derives the display split from the data it already exposes: a
+    // subtitle starting with "⌘" renders in the trailing shortcut slot
+    // instead of the subtitle line. Every other command's subtitle (project
+    // name, workspace name, "Saved View") renders normally underneath the
+    // title.
+    private var isShortcut: Bool { command.subtitle.hasPrefix("⌘") }
+    private var subtitleText: String? {
+        isShortcut ? nil : (command.subtitle.isEmpty ? nil : command.subtitle)
+    }
+    private var shortcutText: String? {
+        isShortcut ? command.subtitle : nil
+    }
+
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: command.icon)
-                .foregroundStyle(.secondary)
-                .frame(width: 20)
+                .font(.system(size: 14))
+                .foregroundStyle(isSelected ? Nocturne.accent : Nocturne.textDim)
+                .frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
                 Text(command.title)
-                    .font(.body)
-                if !command.subtitle.isEmpty {
-                    Text(command.subtitle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .font(Nocturne.Font_.inter(13))
+                    .foregroundStyle(Nocturne.Neutral.n300)
+                if let subtitleText {
+                    Text(subtitleText)
+                        .font(Nocturne.Font_.inter(10.5))
+                        .foregroundStyle(Nocturne.Neutral.n700)
                 }
             }
             Spacer()
+            if let shortcutText {
+                Text(shortcutText)
+                    .font(Nocturne.Font_.inter(10.5))
+                    .foregroundStyle(Nocturne.textFaint)
+            }
         }
-        .padding(.vertical, 4)
-        .padding(.horizontal, 8)
-        .background(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: Nocturne.Radius.control)
+                .fill(isSelected ? Nocturne.accentSel : Color.clear)
+        )
     }
 }

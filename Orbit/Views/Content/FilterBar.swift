@@ -19,14 +19,16 @@ struct FilterBar: View {
     var body: some View {
         @Bindable var fs = filterState
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
+            HStack(spacing: 7) {
                 statusMenu
                 priorityMenu
                 if let workspace = activeWorkspace, !workspace.unwrappedLabels.isEmpty {
                     labelMenu(workspace)
                 }
 
-                Divider().frame(height: 16)
+                Rectangle()
+                    .fill(Nocturne.border)
+                    .frame(width: 1, height: 15)
 
                 openToggle
                 sortMenu
@@ -40,10 +42,12 @@ struct FilterBar: View {
                     saveButton
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(.bar)
-            Divider()
+            .padding(.horizontal, 18)
+            .padding(.vertical, 9)
+            .background(Nocturne.bgBar)
+            Rectangle()
+                .fill(Nocturne.divider)
+                .frame(height: 1)
         }
         .onChange(of: appActions.focusSearchSignal) {
             if appActions.focusSearchSignal {
@@ -153,50 +157,58 @@ struct FilterBar: View {
         .fixedSize()
     }
 
+    /// `#191B28` no es uno de los tokens de superficie en Theme.swift (no es
+    /// `bg`/`bgDeep`/`bgBar`/`surface`); es el hex literal que el README §4 pide
+    /// puntualmente para el fondo del campo de búsqueda (mismo valor que usa
+    /// el buscador de la sidebar en §2). Local y anotado, según la regla del
+    /// contexto común.
+    private var searchFieldBackground: Color { Color(hex: "#191B28") }
+
     private var searchField: some View {
         @Bindable var fs = filterState
         return HStack(spacing: 6) {
             Image(systemName: "magnifyingglass")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12))
+                .foregroundStyle(Nocturne.textDim)
             TextField("Search", text: $fs.searchText)
                 .textFieldStyle(.plain)
-                .font(.callout)
-                .frame(width: 160)
+                .font(Nocturne.Font_.control)
+                .foregroundStyle(Nocturne.text)
+                .frame(width: 170)
                 .focused($isSearchFocused)
             if !filterState.searchText.isEmpty {
                 Button { filterState.searchText = "" } label: {
-                    Image(systemName: "xmark.circle.fill").font(.caption)
+                    Image(systemName: "xmark.circle.fill").font(.system(size: 12))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Nocturne.textFaint)
             }
         }
         .padding(.horizontal, 10)
         .frame(height: controlHeight)
-        .background(Color.primary.opacity(0.06), in: RoundedRectangle(cornerRadius: 7))
+        .background(searchFieldBackground, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Nocturne.border, lineWidth: 1))
     }
 
     private var clearButton: some View {
         Button { filterState.reset() } label: {
             Image(systemName: "xmark.circle.fill")
+                .font(.system(size: 12))
                 .frame(height: controlHeight)
         }
         .buttonStyle(.plain)
-        .foregroundStyle(.secondary)
+        .foregroundStyle(Nocturne.textDim)
         .help("Clear all filters")
     }
 
+    /// "Save View" pasa a outline acento cuando `filterState.isActive`
+    /// (README §4) — en la práctica siempre que esté visible, ya que solo se
+    /// renderiza dentro del `if filterState.isActive` de arriba.
     private var saveButton: some View {
         Button { showSaveSheet = true } label: {
             Text("Save View")
-                .font(.callout)
-                .padding(.horizontal, 10)
-                .frame(height: controlHeight)
-                .background(Color.accentColor, in: RoundedRectangle(cornerRadius: 7))
-                .foregroundStyle(.white)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(OutlineAccentButtonStyle())
     }
 
     // MARK: - Save
@@ -223,34 +235,41 @@ private struct FilterPill: View {
     let icon: String
     let height: CGFloat
     var active: Bool = false
+    @State private var hovering = false
+
+    /// Un filtro con selección (count > 0) se ve "activo" igual que un toggle
+    /// explícito como "Solo abiertos" — mismo tratamiento visual en ambos casos.
+    private var isActive: Bool { active || count > 0 }
 
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: icon)
-                .font(.caption2)
+                .font(.system(size: 12))
             Text(title)
-                .font(.callout)
+                .font(.system(size: 12))
+                .lineLimit(1)
             if count > 0 {
                 Text("\(count)")
-                    .font(.caption2.weight(.bold))
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(Color.accentColor, in: Capsule())
-                    .foregroundStyle(.white)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(Color(hex: "#161826"))
+                    .frame(minWidth: 15, minHeight: 15)
+                    .background(Nocturne.accent, in: Circle())
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 9)
         .frame(height: height)
+        .fixedSize()
         .background(
             RoundedRectangle(cornerRadius: 7)
-                .fill(active ? Color.accentColor.opacity(0.15) : Color.primary.opacity(0.06))
+                .fill(isActive ? Nocturne.accentSel : Color.clear)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(active ? Color.accentColor.opacity(0.5) : .clear, lineWidth: 1)
+                .stroke(isActive ? Nocturne.Accent.a800 : (hovering ? Nocturne.borderHover : Nocturne.border), lineWidth: 1)
         )
-        .foregroundStyle(active || count > 0 ? Color.accentColor : Color.primary)
+        .foregroundStyle(isActive ? Nocturne.accentText : Nocturne.textMuted)
         .contentShape(Rectangle())
+        .onHover { hovering = $0 }
     }
 }
 
@@ -260,25 +279,70 @@ private struct SaveViewSheet: View {
     @Binding var isPresented: Bool
     let onSave: (String) -> Void
     @State private var name = ""
+    @FocusState private var nameFocused: Bool
+
+    private var canSave: Bool { !name.trimmingCharacters(in: .whitespaces).isEmpty }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Save View").font(.headline)
-            Text("Saves the current filters and sort as a reusable view in this workspace.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            TextField("View name", text: $name)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 260)
+        VStack(alignment: .leading, spacing: 0) {
+            // Header
+            Text("Save View")
+                .font(Nocturne.Font_.inter(15, .semibold))
+                .foregroundStyle(Nocturne.text)
+                .padding(.horizontal, DS.Space.lg)
+                .padding(.vertical, DS.Space.md)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Nocturne.border).frame(height: 1)
+                }
+
+            // Body
+            VStack(alignment: .leading, spacing: DS.Space.sm) {
+                Text("Saves the current filters and sort as a reusable view in this workspace.")
+                    .font(Nocturne.Font_.meta)
+                    .foregroundStyle(Nocturne.textDim)
+                TextField("View name", text: $name)
+                    .textFieldStyle(.plain)
+                    .font(Nocturne.Font_.control)
+                    .foregroundStyle(Nocturne.text)
+                    .focused($nameFocused)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .background(Nocturne.bg)
+                    .clipShape(RoundedRectangle(cornerRadius: Nocturne.Radius.control))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Nocturne.Radius.control)
+                            .stroke(Nocturne.border, lineWidth: 1)
+                    )
+                    .onSubmit { if canSave { save() } }
+            }
+            .padding(DS.Space.lg)
+
+            // Footer
             HStack {
                 Spacer()
                 Button("Cancel") { isPresented = false }
-                Button("Save") { onSave(name); isPresented = false }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(name.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .buttonStyle(OutlineNeutralButtonStyle())
+                    .keyboardShortcut(.cancelAction)
+                Button("Save") { save() }
+                    .buttonStyle(OutlineAccentButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSave)
+            }
+            .padding(.horizontal, DS.Space.lg)
+            .padding(.vertical, DS.Space.md)
+            .overlay(alignment: .top) {
+                Rectangle().fill(Nocturne.border).frame(height: 1)
             }
         }
-        .padding(24)
         .frame(width: 320)
+        .background(Nocturne.surface)
+        .clipShape(RoundedRectangle(cornerRadius: DS.Radius.sheet))
+        .nocturneElevation(.sheet)
+        .onAppear { nameFocused = true }
+    }
+
+    private func save() {
+        onSave(name)
+        isPresented = false
     }
 }
