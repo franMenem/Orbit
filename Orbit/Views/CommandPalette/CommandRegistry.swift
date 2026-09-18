@@ -78,6 +78,14 @@ enum CommandRegistry {
                 action: { appActions.pendingMode = .board }
             ))
         }
+        if query.isEmpty || "timeline".localizedCaseInsensitiveContains(query) {
+            commands.append(PaletteCommand(
+                title: "Switch to Timeline",
+                subtitle: "⌘3",
+                icon: "calendar",
+                action: { appActions.pendingMode = .timeline }
+            ))
+        }
 
         return commands
     }

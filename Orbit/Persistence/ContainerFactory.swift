@@ -19,7 +19,7 @@ enum ContainerFactory {
     // Signing & Capabilities → iCloud → CloudKit Containers.
     static let cloudKitContainerID = "iCloud.com.fran.orbit"
 
-    /// All five model types that form the Orbit schema.
+    /// All model types that form the Orbit schema.
     static let schema = Schema([
         Workspace.self,
         Project.self,
@@ -27,6 +27,7 @@ enum ContainerFactory {
         Label.self,
         SavedView.self,
         Attachment.self,
+        Comment.self,
     ])
 
     /// Returns a ModelContainer. Uses CloudKit only when:

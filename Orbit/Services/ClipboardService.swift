@@ -156,6 +156,21 @@ enum ClipboardService {
             lines.append("")
         }
 
+        // Comments (oldest first) — mirrors Details/Solution: heading, blank
+        // line, one bullet per comment with its relative timestamp and text.
+        let comments = issue.unwrappedComments
+        if !comments.isEmpty {
+            lines.append("## Comments")
+            lines.append("")
+            for comment in comments {
+                let when = comment.createdAt.formatted(.relative(presentation: .named))
+                let imageCount = comment.unwrappedAttachments.count
+                let suffix = imageCount > 0 ? " (\(imageCount) image\(imageCount == 1 ? "" : "s"))" : ""
+                lines.append("- **\(when):** \(comment.text)\(suffix)")
+            }
+            lines.append("")
+        }
+
         // Attachment list (just names; the bytes are on the pasteboard separately)
         let attachments = issue.attachments ?? []
         if !attachments.isEmpty {

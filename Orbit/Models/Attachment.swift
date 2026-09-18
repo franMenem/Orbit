@@ -18,6 +18,11 @@ final class Attachment {
 
     var issue: Issue? = nil
 
+    /// Set instead of `issue` when this attachment is a comment's pasted
+    /// image, so issue-level attachment lists (`Issue.attachments`) never
+    /// pick up comment images.
+    var comment: Comment? = nil
+
     init(filename: String = "", contentType: String = "", data: Data? = nil) {
         self.filename    = filename
         self.contentType = contentType

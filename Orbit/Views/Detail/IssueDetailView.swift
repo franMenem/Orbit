@@ -1,5 +1,7 @@
+import AppKit
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MARK: - IssueDetailView (root)
@@ -29,10 +31,12 @@ struct IssueDetailView: View {
 // Responsibility: arrange sections + own the copy-confirmation toast state.
 // All editing logic is delegated to focused sub-views.
 //
-// Nocturne restyle: `Form(.grouped)` is gone — this is a fixed-width
-// (404pt) ScrollView + VStack column, `bgDeep` background, divider on the
-// leading edge (drawn by the parent split view's own divider elsewhere, but
-// we render one here too since this view can also be used stand-alone).
+// Nocturne restyle: `Form(.grouped)` is gone — this is a ScrollView + VStack
+// column that fills whatever width its container gives it (the Shell 1b
+// overlay in RootSplitView pins that to 540pt), `bgDeep` background, and its
+// own 1pt divider on the leading edge — this view is no longer a
+// NavigationSplitView column (which would draw that seam for free), it's an
+// overlaid panel, so the divider has to be self-drawn.
 // ─────────────────────────────────────────────────────────────────────────────
 
 private struct IssueEditorView: View {
@@ -41,6 +45,7 @@ private struct IssueEditorView: View {
     @Environment(AppActions.self) private var appActions
     @State private var copyConfirmation: String? = nil
     @FocusState private var isTitleFocused: Bool
+    @State private var pasteMonitor: Any? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -60,12 +65,14 @@ private struct IssueEditorView: View {
 
                     IssueAttachmentsSection(issue: issue)
 
+                    IssueCommentsSection(issue: issue)
+
                     IssueMetadataFooter(issue: issue)
                 }
                 .padding(16)
             }
         }
-        .frame(width: 404)
+        .frame(maxWidth: .infinity)
         .frame(maxHeight: .infinity)
         .background(Nocturne.bgDeep)
         .overlay(alignment: .leading) {
@@ -81,6 +88,8 @@ private struct IssueEditorView: View {
                 appActions.focusNewIssueTitle = false
             }
         }
+        .onAppear { installPasteMonitor() }
+        .onDisappear { removePasteMonitor() }
     }
 
     private func save() {
@@ -93,6 +102,64 @@ private struct IssueEditorView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
             withAnimation(.easeOut(duration: 0.3)) { copyConfirmation = nil }
         }
+    }
+
+    // MARK: - ⌘V paste (issue-level attachments)
+    //
+    // `.onPasteCommand` only fires on the current paste RESPONDER. Nothing in
+    // this panel besides the title/description/solution fields and the
+    // comment composer — all NSTextView-backed — is ever a responder, so a
+    // plain section VStack (e.g. Attachments) never receives it, no matter
+    // where it's attached. A bare ⌘V while just browsing the panel needs a
+    // local NSEvent monitor instead: it inspects the key window's first
+    // responder and only intercepts when the user is NOT mid-edit in a text
+    // field, so normal text paste (title, description, solution, comments)
+    // is completely unaffected and keeps working exactly as before.
+    //
+    // The monitor is installed per-panel-appearance (`.onAppear`/
+    // `.onDisappear`, token in `@State`) — `IssueDetailView` gives
+    // `IssueEditorView` a fresh identity per issue via `.id(_:)`, so this
+    // naturally reinstalls (with the right `issue` captured) whenever the
+    // selected issue changes, and tears down when the panel closes.
+    private func installPasteMonitor() {
+        guard pasteMonitor == nil else { return }
+        pasteMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+                  event.charactersIgnoringModifiers?.lowercased() == "v" else { return event }
+
+            // Let normal text paste proceed for title/description/solution/
+            // comment composer — all NSTextView-backed under the hood.
+            if let responder = NSApp.keyWindow?.firstResponder, responder is NSText {
+                return event
+            }
+
+            guard let imported = PastedImageImporter.importFromGeneralPasteboard() else { return event }
+            attachPastedImage(imported)
+            return nil
+        }
+    }
+
+    private func removePasteMonitor() {
+        if let pasteMonitor {
+            NSEvent.removeMonitor(pasteMonitor)
+        }
+        pasteMonitor = nil
+    }
+
+    /// Turns one image found on the general pasteboard into an issue-level
+    /// Attachment — mirrors `AttachmentsView.attachFile`.
+    private func attachPastedImage(_ imported: PastedImageImporter.Imported) {
+        guard let png = PastedImageImporter.normalizedPNG(from: imported.data) else { return }
+        let att = Attachment(
+            filename: PastedImageImporter.pastedImageFilename(),
+            contentType: UTType.png.identifier,
+            data: png
+        )
+        att.issue = issue
+        if issue.attachments == nil { issue.attachments = [] }
+        issue.attachments?.append(att)
+        context.insert(att)
+        try? context.save()
     }
 }
 
@@ -309,6 +376,8 @@ private struct DueDateMenuValue: View {
     @Bindable var issue: Issue
     let onSave: () -> Void
 
+    @State private var showingPicker = false
+
     private var dateBinding: Binding<Date> {
         Binding(
             get: { issue.dueDate ?? .now },
@@ -317,16 +386,11 @@ private struct DueDateMenuValue: View {
     }
 
     var body: some View {
-        Menu {
-            DatePicker("Due date", selection: dateBinding, displayedComponents: .date)
-                .labelsHidden()
-            if issue.dueDate != nil {
-                Divider()
-                Button("Clear Due Date", role: .destructive) {
-                    issue.dueDate = nil
-                    onSave()
-                }
-            }
+        // Menu content on macOS renders as NSMenu items, which can't host an
+        // interactive DatePicker — use a popover instead so the calendar
+        // actually responds to clicks.
+        Button {
+            showingPicker.toggle()
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "calendar")
@@ -339,8 +403,24 @@ private struct DueDateMenuValue: View {
                 MenuCaret()
             }
         }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .popover(isPresented: $showingPicker, arrowEdge: .bottom) {
+            VStack(spacing: 8) {
+                DatePicker("Due date", selection: dateBinding, displayedComponents: .date)
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                if issue.dueDate != nil {
+                    Divider()
+                    Button("Clear Due Date", role: .destructive) {
+                        issue.dueDate = nil
+                        onSave()
+                        showingPicker = false
+                    }
+                }
+            }
+            .padding(12)
+        }
     }
 
     private var dueDateText: String {
@@ -355,6 +435,7 @@ private struct DueDateMenuValue: View {
 private struct IssueLabelsValue: View {
     @Bindable var issue: Issue
     @Environment(\.modelContext) private var context
+    @State private var showingNewLabelSheet = false
 
     private var workspace: Workspace? { issue.project?.workspace }
 
@@ -378,6 +459,10 @@ private struct IssueLabelsValue: View {
             } else {
                 Text("No labels in this workspace")
             }
+            if workspace != nil {
+                Divider()
+                Button("New Label…") { showingNewLabelSheet = true }
+            }
         } label: {
             HStack(alignment: .top, spacing: 6) {
                 if issue.unwrappedLabels.isEmpty {
@@ -397,6 +482,13 @@ private struct IssueLabelsValue: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
+        .sheet(isPresented: $showingNewLabelSheet) {
+            if let workspace {
+                NewLabelSheet(workspace: workspace) { label in
+                    toggle(label: label, attached: false)
+                }
+            }
+        }
     }
 
     // `Orbit.Label` disambiguates from `SwiftUI.Label`, both visible here —
@@ -477,6 +569,288 @@ private struct IssueAttachmentsSection: View {
         VStack(alignment: .leading, spacing: 10) {
             SectionCaps(text: "Attachments")
             AttachmentsView(issue: issue)
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MARK: - IssueCommentsSection
+// Linear-style comments: oldest-first list + a bottom composer that accepts
+// pasted images (⌘V) as pending thumbnails and posts on ⌘Enter or the
+// "Comment" button. Reuses `ImagePreviewSheet` (AttachmentsView.swift) for
+// full-size previews instead of duplicating it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+private struct IssueCommentsSection: View {
+    @Bindable var issue: Issue
+    @Environment(\.modelContext) private var context
+
+    @State private var draftText = ""
+    @State private var pendingImages: [PendingCommentImage] = []
+    @State private var preview: Attachment? = nil
+
+    private var canSubmit: Bool {
+        !draftText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !pendingImages.isEmpty
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SectionCaps(text: "Comments")
+
+            if !issue.unwrappedComments.isEmpty {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(issue.unwrappedComments) { comment in
+                        CommentRow(
+                            comment: comment,
+                            onDelete: { delete(comment) },
+                            onPreview: { preview = $0 }
+                        )
+                        if comment.id != issue.unwrappedComments.last?.id {
+                            Rectangle().fill(Nocturne.rowLine).frame(height: 1)
+                        }
+                    }
+                }
+            }
+
+            CommentComposer(
+                text: $draftText,
+                pendingImages: $pendingImages,
+                canSubmit: canSubmit,
+                onSubmit: submit
+            )
+        }
+        .sheet(item: $preview) { att in
+            ImagePreviewSheet(attachment: att)
+        }
+    }
+
+    private func submit() {
+        guard canSubmit else { return }
+
+        let comment = Comment(text: draftText.trimmingCharacters(in: .whitespacesAndNewlines))
+        comment.issue = issue
+        if issue.comments == nil { issue.comments = [] }
+        issue.comments?.append(comment)
+        context.insert(comment)
+
+        for pending in pendingImages {
+            // NOT `issue` — comment images live only on `comment.attachments`
+            // so issue-level attachment lists never pick them up.
+            let att = Attachment(
+                filename: PastedImageImporter.pastedImageFilename(),
+                contentType: UTType.png.identifier,
+                data: pending.data
+            )
+            att.comment = comment
+            if comment.attachments == nil { comment.attachments = [] }
+            comment.attachments?.append(att)
+            context.insert(att)
+        }
+
+        try? context.save()
+        draftText = ""
+        pendingImages = []
+    }
+
+    private func delete(_ comment: Comment) {
+        issue.comments?.removeAll { $0.persistentModelID == comment.persistentModelID }
+        context.delete(comment)   // cascades comment.attachments — see Comment.swift
+        try? context.save()
+    }
+}
+
+/// One posted comment: relative timestamp, text, and (optionally) images
+/// rendered inline at content width, Linear-style — readable without
+/// clicking through. Delete button appears on hover.
+private struct CommentRow: View {
+    let comment: Comment
+    let onDelete: () -> Void
+    let onPreview: (Attachment) -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 6) {
+                Text(comment.createdAt.formatted(.relative(presentation: .named)))
+                    .font(Nocturne.Font_.inter(11))
+                    .foregroundStyle(Nocturne.textFaint)
+                Spacer(minLength: 8)
+                if isHovered {
+                    Button(action: onDelete) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Nocturne.textFaint)
+                    }
+                    .buttonStyle(.plain)
+                    .help("Delete comment")
+                }
+            }
+
+            if !comment.text.isEmpty {
+                Text(comment.text)
+                    .font(Nocturne.Font_.inter(13))
+                    .foregroundStyle(Nocturne.textMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if !comment.unwrappedAttachments.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(comment.unwrappedAttachments) { att in
+                        CommentImageInline(attachment: att) { onPreview(att) }
+                    }
+                }
+            }
+        }
+        .onHover { isHovered = $0 }
+    }
+}
+
+/// Full-content-width, clickable inline render of a comment's image
+/// attachment (Linear-style — readable in the comment itself, no click
+/// needed to see it). Capped at `maxHeight` so a huge screenshot can't take
+/// over the panel; click still opens `ImagePreviewSheet` for full size.
+private struct CommentImageInline: View {
+    let attachment: Attachment
+    let onTap: () -> Void
+
+    private let maxHeight: CGFloat = 320
+
+    var body: some View {
+        Group {
+            if let data = attachment.data, let img = NSImage(data: data) {
+                Image(nsImage: img)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: maxHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: Nocturne.Radius.row))
+            }
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: Nocturne.Radius.row)
+                .stroke(Nocturne.border, lineWidth: 1)
+        )
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
+    }
+}
+
+/// An image pasted into the composer but not yet posted.
+private struct PendingCommentImage: Identifiable {
+    let id = UUID()
+    let data: Data
+}
+
+/// Bottom composer: plain multiline field + pending-image thumbnails +
+/// "Comment" button. Accepts ⌘V of clipboard images (screenshots arrive as
+/// PNG/TIFF; image file URLs also work) and ⌘Enter to submit.
+private struct CommentComposer: View {
+    @Binding var text: String
+    @Binding var pendingImages: [PendingCommentImage]
+    let canSubmit: Bool
+    let onSubmit: () -> Void
+
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .topLeading) {
+                if text.isEmpty {
+                    Text("Leave a comment…")
+                        .font(Nocturne.Font_.body)
+                        .foregroundStyle(Nocturne.textFaint)
+                        .padding(.top, 9)
+                        .padding(.leading, 11)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: $text)
+                    .font(Nocturne.Font_.body)
+                    .foregroundStyle(Nocturne.text)
+                    .scrollContentBackground(.hidden)
+                    .padding(6)
+                    .frame(minHeight: 56, maxHeight: 120)
+                    .focused($isFocused)
+            }
+            .background(Nocturne.surface, in: RoundedRectangle(cornerRadius: Nocturne.Radius.row))
+            .overlay(
+                RoundedRectangle(cornerRadius: Nocturne.Radius.row)
+                    .strokeBorder(isFocused ? Nocturne.accent : Nocturne.border, lineWidth: isFocused ? 1.5 : 1)
+            )
+            .animation(.easeInOut(duration: 0.12), value: isFocused)
+            .onPasteCommand(of: [
+                UTType.png.identifier,
+                UTType.tiff.identifier,
+                UTType.image.identifier,
+                UTType.fileURL.identifier,
+            ]) { providers in
+                PastedImageImporter.importImages(from: providers) { imported in
+                    for image in imported {
+                        guard let png = PastedImageImporter.normalizedPNG(from: image.data) else { continue }
+                        pendingImages.append(PendingCommentImage(data: png))
+                    }
+                }
+            }
+
+            if !pendingImages.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(pendingImages) { pending in
+                        PendingCommentImageThumb(pending: pending) {
+                            pendingImages.removeAll { $0.id == pending.id }
+                        }
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button("Comment", action: submitAndClearFocus)
+                    .buttonStyle(OutlineAccentButtonStyle())
+                    .disabled(!canSubmit)
+            }
+        }
+        // Hidden ⌘Enter shortcut — fires even while the TextEditor has focus.
+        .background(
+            Button(action: submitAndClearFocus) { EmptyView() }
+                .keyboardShortcut(.return, modifiers: .command)
+                .disabled(!canSubmit)
+                .opacity(0)
+                .frame(width: 0, height: 0)
+        )
+    }
+
+    private func submitAndClearFocus() {
+        onSubmit()
+        isFocused = false
+    }
+}
+
+/// Small removable thumbnail for an image pending in the composer.
+private struct PendingCommentImageThumb: View {
+    let pending: PendingCommentImage
+    let onRemove: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if let img = NSImage(data: pending.data) {
+                Image(nsImage: img)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 56, height: 56)
+                    .clipShape(RoundedRectangle(cornerRadius: Nocturne.Radius.chip))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Nocturne.Radius.chip)
+                            .stroke(Nocturne.border, lineWidth: 1)
+                    )
+            }
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Nocturne.text)
+                    .background(Circle().fill(Nocturne.bgDeep))
+            }
+            .buttonStyle(.plain)
+            .offset(x: 5, y: -5)
         }
     }
 }
