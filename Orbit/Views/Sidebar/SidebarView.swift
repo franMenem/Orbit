@@ -8,6 +8,7 @@ struct SidebarView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Workspace.createdAt) private var workspaces: [Workspace]
     @State private var labelManagerWorkspace: Workspace?
+    @State private var addHovered = false
 
     // Project edit/delete are hoisted to this stable view. An .alert or .sheet
     // attached to a row nested inside a DisclosureGroup does NOT present in
@@ -16,7 +17,6 @@ struct SidebarView: View {
     @State private var projectToDelete: Project?
 
     var body: some View {
-        @Bindable var sel = selection
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 14) {
                 BrandHeader()
@@ -26,12 +26,48 @@ struct SidebarView: View {
             .padding(.horizontal, 10)
             .padding(.bottom, 14)
 
-            List(selection: $sel.selectedProject) {
-                SectionCaps(text: "Workspaces")
-                    .padding(.horizontal, 6)
-                    .listRowInsets(EdgeInsets())
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
+            // Plain List — selection is NOT bound here. Project rows nested
+            // inside a manually-styled DisclosureGroup don't reliably
+            // participate in List's native `selection:` row-selection
+            // machinery (only the initially-set project stayed selected;
+            // clicks on other rows were silently swallowed). ProjectRow
+            // instead selects itself via `.onTapGesture`, exactly like
+            // SavedViewRow already does in this same List — one single,
+            // consistent selection mechanism for every row.
+            List {
+                HStack(spacing: 4) {
+                    SectionCaps(text: "Workspaces")
+                    Spacer(minLength: 4)
+                    Menu {
+                        Button("New Workspace") { addWorkspace() }
+                        if !workspaces.isEmpty {
+                            Divider()
+                            ForEach(workspaces) { workspace in
+                                Button("New Project in \(workspace.name)") {
+                                    addProject(to: workspace)
+                                }
+                            }
+                            Divider()
+                            ForEach(workspaces) { workspace in
+                                Button("Manage Labels in \(workspace.name)") {
+                                    labelManagerWorkspace = workspace
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(addHovered ? Nocturne.textMuted : Nocturne.textDim)
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .onHover { addHovered = $0 }
+                }
+                .padding(.horizontal, 6)
+                .listRowInsets(EdgeInsets())
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
 
                 ForEach(workspaces) { workspace in
                     WorkspaceRow(
@@ -53,7 +89,6 @@ struct SidebarView: View {
         .overlay(alignment: .trailing) {
             Rectangle().fill(Nocturne.divider).frame(width: 1)
         }
-        .navigationTitle("Orbit")
         .sheet(item: $labelManagerWorkspace) { ws in
             LabelManagerView(workspace: ws)
         }
@@ -71,27 +106,6 @@ struct SidebarView: View {
                 if let project = projectToDelete { deleteProject(project) }
             }
             Button("Cancel", role: .cancel) { projectToDelete = nil }
-        }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button("New Workspace") { addWorkspace() }
-                    if !workspaces.isEmpty {
-                        Divider()
-                        ForEach(workspaces) { workspace in
-                            Button("New Project in \(workspace.name)") {
-                                addProject(to: workspace)
-                            }
-                        }
-                        Divider()
-                        ForEach(workspaces) { workspace in
-                            Button("Manage Labels in \(workspace.name)") {
-                                labelManagerWorkspace = workspace
-                            }
-                        }
-                    }
-                } label: { Image(systemName: "plus") }
-            }
         }
         .onAppear {
             let firstProject = SeedData.ensureSeed(context)
@@ -381,11 +395,28 @@ private struct ProjectRow: View {
             }
         }
         .onHover { isHovered = $0 }
-        .tag(project)
+        // Double-click before single-click: SwiftUI resolves double-tap in
+        // preference to single-tap when the double-tap gesture is declared
+        // first, so a fast double-click opens rename instead of just
+        // toggling selection twice.
+        .onTapGesture(count: 2) { onEdit() }
+        .onTapGesture { toggleSelect() }
         .contextMenu {
             Button("Rename / Edit…") { onEdit() }
             Divider()
             Button("Delete Project", role: .destructive) { onDelete() }
+        }
+    }
+
+    /// Click a project to select it; click the already-selected project again
+    /// to deselect it (previous toggle behavior) — now the ONLY mechanism
+    /// that drives `selection.selectedProject`, so it can never race with
+    /// List's own native row selection.
+    private func toggleSelect() {
+        if isSelected {
+            selection.selectedProject = nil
+        } else {
+            selection.selectedProject = project
         }
     }
 }

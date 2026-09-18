@@ -16,6 +16,7 @@ struct NewIssueSheet: View {
     @State private var status: IssueStatus = .backlog
     @State private var priority: IssuePriority = .none
     @State private var selectedLabelIDs: Set<PersistentIdentifier> = []
+    @State private var showingNewLabelSheet = false
     @FocusState private var titleFocused: Bool
 
     private var canCreate: Bool {
@@ -168,6 +169,8 @@ struct NewIssueSheet: View {
                     }
                 }
             }
+            Divider()
+            Button("New Label…") { showingNewLabelSheet = true }
         } label: {
             HStack(spacing: 5) {
                 Image(systemName: "tag")
@@ -181,6 +184,13 @@ struct NewIssueSheet: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .sheet(isPresented: $showingNewLabelSheet) {
+            if let workspace = project.workspace {
+                NewLabelSheet(workspace: workspace) { label in
+                    selectedLabelIDs.insert(label.persistentModelID)
+                }
+            }
+        }
     }
 
     private func toggleLabel(_ label: Orbit.Label) {

@@ -1,8 +1,12 @@
 import SwiftUI
 
-/// Three-column root shell. The SINGLE owner of all shared @Observable state.
-/// Holds each shared object as @State and injects it once via .environment.
-/// Children NEVER instantiate these objects — they read via @Environment(Type.self).
+/// Shell 1b "Stage": two-column root shell (sidebar + content). The detail
+/// view is no longer a third NavigationSplitView column — it's an overlaid
+/// panel (see `DetailPanelOverlay` below) that slides in from the trailing
+/// edge whenever an issue is selected. The SINGLE owner of all shared
+/// @Observable state. Holds each shared object as @State and injects it once
+/// via .environment. Children NEVER instantiate these objects — they read
+/// via @Environment(Type.self).
 struct RootSplitView: View {
     @State private var selection = Selection()
     @State private var filterState = FilterState()
@@ -27,17 +31,34 @@ struct RootSplitView: View {
             if cloudStatus.showOfflineBanner, case let .unavailable(reason) = cloudStatus.status {
                 OfflineBanner(reason: reason)
             }
-            NavigationSplitView {
-                SidebarView()
+            ZStack(alignment: .trailing) {
+                NavigationSplitView {
+                    SidebarView()
+                    #if os(macOS)
+                        .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 300)
+                    #endif
+                } detail: {
+                    ContentPaneView()
+                }
                 #if os(macOS)
-                    .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 300)
+                // Suppresses the native sidebar-toggle button that
+                // NavigationSplitView otherwise injects into the window's
+                // toolbar. Using `.toolbar(removing: .sidebarToggle)` here
+                // (rather than `.toolbar(.hidden, for: .windowToolbar)`)
+                // leaves the window's native toolbar/titlebar chrome intact
+                // — including the traffic-light buttons — instead of
+                // collapsing it, which previously nuked the close/
+                // miniaturize/zoom buttons entirely and still left a blank
+                // reserved strip above our custom TitleBar.
+                .toolbar(removing: .sidebarToggle)
                 #endif
-            } content: {
-                ContentPaneView()
-            } detail: {
-                IssueDetailView()
+
+                DetailPanelOverlay()
             }
         }
+        #if os(macOS)
+        .background(WindowConfigurator())
+        #endif
         .environment(selection)
         .environment(filterState)
         .environment(cloudStatus)
@@ -46,6 +67,54 @@ struct RootSplitView: View {
             // Nocturne sheet spec) — no outer frame override here.
             CommandPaletteView()
         }
+    }
+}
+
+// MARK: - Detail Panel Overlay
+//
+// Shell 1b "Stage" (README §"Panel de detalle"): el detalle ya no es la
+// tercera columna del NavigationSplitView — es un panel de 540px que entra
+// desde el borde derecho sobre un backdrop semitransparente. Cerrar = click
+// en el backdrop, botón "Cerrar" dentro de IssueDetailView, o Escape.
+//
+// Fuente de verdad del estado del panel: `selection.selectedIssue` (no hay
+// `@State private var showDetailPanel` adicional). El README lo deja abierto
+// ("si selectedIssue alcanza como fuente de verdad, anotalo y no dupliques
+// estado") — duplicar el flag introduciría un segundo lugar para
+// desincronizarse de la selección real, por ejemplo cuando `NewIssueSheet`
+// hace `selection.selectedIssue = issue` al crear (ContentPaneView) o cuando
+// se selecciona una fila desde List/Board/Timeline vía el binding de
+// `Selection` — todos esos casos ya abren el panel gratis con este approach.
+private struct DetailPanelOverlay: View {
+    @Environment(Selection.self) private var selection
+
+    var body: some View {
+        // El ZStack en sí es SIEMPRE parte del árbol (no está detrás de un
+        // `if` a este nivel) para que `.animation(value:)` pueda animar la
+        // entrada/salida de su contenido condicional sin depender de que
+        // cada call-site que toca `selectedIssue` recuerde envolver en
+        // `withAnimation` (List, NewIssueSheet, etc. no lo hacen).
+        ZStack(alignment: .trailing) {
+            if selection.selectedIssue != nil {
+                Color(hex: "#08090F")
+                    .opacity(0.45)
+                    .ignoresSafeArea()
+                    .onTapGesture { close() }
+                    .transition(.opacity)
+
+                IssueDetailView()
+                    .frame(width: 540)
+                    .frame(maxHeight: .infinity)
+                    .shadow(color: .black.opacity(0.55), radius: 30, x: -12, y: 0)
+                    .transition(.move(edge: .trailing))
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: selection.selectedIssue)
+        .onExitCommand { close() }
+    }
+
+    private func close() {
+        selection.selectedIssue = nil
     }
 }
 
@@ -123,3 +192,46 @@ private struct OfflineBanner: View {
         }
     }
 }
+
+// MARK: - Window Configurator
+//
+// `.windowStyle(.hiddenTitleBar)` (OrbitApp) hides the native title text and
+// background, but SwiftUI still leaves the window's standard buttons and
+// styleMask up to us to reason about explicitly. This grabs the underlying
+// NSWindow once the view lands in the hierarchy and configures it directly:
+// transparent/hidden titlebar, `.fullSizeContentView` so content (our custom
+// TitleBar) extends under the traffic-light area instead of leaving a
+// reserved blank strip, and explicit re-assertion that the close/miniaturize/
+// zoom buttons are present and visible (they can end up hidden depending on
+// how the toolbar/style-mask combo above resolves).
+#if os(macOS)
+private struct WindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            configure(view.window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async {
+            configure(nsView.window)
+        }
+    }
+
+    private func configure(_ window: NSWindow?) {
+        guard let window else { return }
+
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.styleMask.insert(.fullSizeContentView)
+        window.styleMask.insert([.closable, .miniaturizable, .resizable])
+        window.isMovableByWindowBackground = false
+
+        window.standardWindowButton(.closeButton)?.isHidden = false
+        window.standardWindowButton(.miniaturizeButton)?.isHidden = false
+        window.standardWindowButton(.zoomButton)?.isHidden = false
+    }
+}
+#endif

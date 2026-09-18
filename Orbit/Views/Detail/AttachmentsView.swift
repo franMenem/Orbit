@@ -96,6 +96,13 @@ struct AttachmentsView: View {
                 return true
             }
         }
+        // ⌘V paste for this section is handled by a key-down NSEvent monitor
+        // owned by IssueEditorView (IssueDetailView.swift), not by
+        // `.onPasteCommand` here: that modifier only fires on the current
+        // paste RESPONDER, and a plain VStack never becomes one, so it would
+        // never fire regardless of scroll position. See
+        // IssueEditorView.installPasteMonitor for the real handler — it
+        // covers the whole detail panel, not just this section.
         // ── File importer (the correct SwiftUI API for file picking) ──────
         .fileImporter(
             isPresented: $showFilePicker,
@@ -210,9 +217,11 @@ private struct AttachmentRow: View {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MARK: - ImagePreviewSheet
+// Non-private: reused by IssueCommentsSection (IssueDetailView.swift) for
+// previewing comment image attachments — same module, no import needed.
 // ─────────────────────────────────────────────────────────────────────────────
 
-private struct ImagePreviewSheet: View {
+struct ImagePreviewSheet: View {
     let attachment: Attachment
     @Environment(\.dismiss) private var dismiss
 

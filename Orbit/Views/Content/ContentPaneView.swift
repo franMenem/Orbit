@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 enum ContentViewMode: String {
-    case list, board
+    case list, board, timeline
 }
 
 struct ContentPaneView: View {
@@ -50,7 +50,7 @@ struct ContentPaneView: View {
             FilterBar()
             IssueListView(issues: filtered)
         }
-        .navigationTitle(savedView.name)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: - Signal handlers
@@ -179,26 +179,98 @@ private struct ProjectContentView: View {
         let filtered = IssueFiltering.apply(project.unwrappedIssues, filterState)
         VStack(spacing: 0) {
             ProjectHeader(project: project, onSave: { try? context.save() }, onNewIssue: onNewIssue)
+            ContentModeTabs(mode: $mode)
             FilterBar()
             switch mode {
-            case .list:  IssueListView(issues: filtered)
-            case .board: IssueBoardView(issues: filtered)
+            case .list:     IssueListView(issues: filtered)
+            case .board:    IssueBoardView(issues: filtered)
+            case .timeline: TimelineView(issues: filtered)
             }
         }
-        // Window title bar shows the WORKSPACE for context; the project name
-        // lives ONLY in the editable ProjectHeader below — never shown twice.
-        .navigationTitle(project.workspace?.name ?? "Orbit")
+        // Anchored to the top and greedy on both axes: the column must
+        // always fill the pane, regardless of whether the active mode's
+        // content (e.g. an empty List/Timeline) would otherwise hug its own
+        // size — without this, a non-greedy child lets the Group in
+        // ContentPaneView.body center everything, leaving a huge empty gap
+        // above the ProjectHeader.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .onChange(of: project.name) { try? context.save() }
-        .toolbar {
-            // El botón "+" primario se retiró del toolbar: "Nuevo issue" ahora
-            // vive en ProjectHeader (spec §3), evita el ícono duplicado.
-            ToolbarItem(placement: .secondaryAction) {
-                Picker("View", selection: $mode) {
-                    SwiftUI.Label("List",  systemImage: "list.bullet").tag(ContentViewMode.list)
-                    SwiftUI.Label("Board", systemImage: "square.grid.2x2").tag(ContentViewMode.board)
-                }
-                .pickerStyle(.segmented)
+    }
+}
+
+// MARK: - ContentModeTabs
+// Shell 1b "Stage": reemplaza el Picker segmentado del toolbar por tabs
+// propias List / Board / Timeline dentro del área de contenido (README §
+// "Interactions & Behavior" — "Cambio de vista"). Subrayado de 2px animado
+// con matchedGeometryEffect (~200ms). ⌘1/⌘2/⌘3 siguen andando vía
+// `appActions.pendingMode`, consumido por `handlePendingMode()` arriba —
+// esta vista solo refleja/edita el mismo `@Binding mode`.
+
+private struct ContentModeTabs: View {
+    @Binding var mode: ContentViewMode
+    @Namespace private var underline
+    @State private var hovered: ContentViewMode?
+
+    private struct Tab {
+        let mode: ContentViewMode
+        let title: String
+        let icon: String
+    }
+
+    private let tabs: [Tab] = [
+        Tab(mode: .list,     title: "List",     icon: "list.bullet"),
+        Tab(mode: .board,    title: "Board",    icon: "square.grid.2x2"),
+        Tab(mode: .timeline, title: "Timeline", icon: "calendar"),
+    ]
+
+    var body: some View {
+        HStack(spacing: DS.Space.lg) {
+            ForEach(tabs, id: \.mode) { tab in
+                tabButton(tab)
             }
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, 18)
+        .padding(.top, 8)
+        .background(Nocturne.bg)
+    }
+
+    @ViewBuilder
+    private func tabButton(_ tab: Tab) -> some View {
+        let isActive = mode == tab.mode
+        Button {
+            withAnimation(.easeOut(duration: 0.2)) { mode = tab.mode }
+        } label: {
+            // No outer VStack/ZStack around the underline: an unconstrained
+            // Shape (Color.clear/RoundedRectangle with only a `.frame(height:)`)
+            // takes as much width as it's offered, which made every tab
+            // greedy and stretched the whole HStack to fill the pane with a
+            // mile-long underline. Instead the underline is an `.overlay`
+            // pinned to the label's OWN measured width, so the button stays
+            // compact and left-aligned.
+            SwiftUI.Label(tab.title, systemImage: tab.icon)
+                .font(Nocturne.Font_.control)
+                .foregroundStyle(color(for: tab, isActive: isActive))
+                .fixedSize()
+                .padding(.bottom, 8)
+                .overlay(alignment: .bottom) {
+                    if isActive {
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(Nocturne.accent)
+                            .frame(height: 2)
+                            .matchedGeometryEffect(id: "underline", in: underline)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering in
+            hovered = isHovering ? tab.mode : (hovered == tab.mode ? nil : hovered)
+        }
+    }
+
+    private func color(for tab: Tab, isActive: Bool) -> Color {
+        if isActive { return Nocturne.text }
+        if hovered == tab.mode { return Nocturne.textMuted }
+        return Nocturne.textDim
     }
 }

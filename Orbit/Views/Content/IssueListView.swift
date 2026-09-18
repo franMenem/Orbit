@@ -36,6 +36,8 @@ struct IssueListView: View {
                         .font(Nocturne.Font_.meta)
                         .foregroundStyle(Nocturne.textDim)
                 }
+                // Greedy — see TimelineView's matching empty-state fix for why.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollViewReader { proxy in
                     List(selection: $sel.selectedIssue) {

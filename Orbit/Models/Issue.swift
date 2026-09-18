@@ -27,8 +27,15 @@ final class Issue {
     @Relationship(deleteRule: .cascade, inverse: \Attachment.issue)
     var attachments: [Attachment]? = []
 
+    @Relationship(deleteRule: .cascade, inverse: \Comment.issue)
+    var comments: [Comment]? = []
+
     var unwrappedLabels: [Label] {
         (labels ?? []).sorted { $0.name < $1.name }
+    }
+
+    var unwrappedComments: [Comment] {
+        (comments ?? []).sorted { $0.createdAt < $1.createdAt }
     }
 
     init(title: String = "") {

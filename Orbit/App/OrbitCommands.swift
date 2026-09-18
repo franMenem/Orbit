@@ -34,6 +34,11 @@ struct OrbitCommands: Commands {
             }
             .keyboardShortcut("2", modifiers: .command)
 
+            Button("Timeline") {
+                actions.pendingMode = .timeline
+            }
+            .keyboardShortcut("3", modifiers: .command)
+
             Divider()
 
             Button("Search") {
