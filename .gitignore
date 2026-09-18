@@ -33,3 +33,7 @@ Package.resolved
 *.ipa
 *.dSYM.zip
 *.dSYM
+
+## Local-only redesign assets and planning docs (not part of the published project)
+Rediseño app Orbit.zip
+.planning/
