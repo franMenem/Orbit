@@ -60,3 +60,35 @@ Orbit uses a custom dark theme called **Nocturne**, built on its own design toke
 3. Build and run (`⌘R`) — requires a recent version of macOS and Xcode
 
 No additional setup, API keys, or accounts are needed.
+
+## Roadmap
+
+Orbit takes [Linear](https://linear.app) as its reference: fast, keyboard-first and opinionated, but for a single person.
+
+**Polish and bugs**
+- [ ] Fix text inputs that sometimes don't take focus or the cursor when clicked
+- [ ] General UI/UX pass on the detail pane, sheets and Kanban drag and drop
+- [ ] Add screenshots to this README
+
+**Dates and reminders**
+- [ ] Due dates on issues
+- [ ] "This week" and "Overdue" views
+- [ ] macOS notifications for upcoming due dates
+
+**Sync and devices**
+- [ ] Turn on CloudKit sync (the persistence layer is already prepared for it)
+- [ ] iPhone and iPad app sharing the same data
+
+**Automation and integrations**
+- [ ] Local API so scripts and AI assistants can create and update issues
+- [ ] GitHub integration: link commits and pull requests to issues and move them to Done on merge
+- [ ] Import from Linear and CSV
+
+**Data safety**
+- [ ] Export to JSON and CSV
+- [ ] Automatic local backups with restore
+
+**Linear-style planning**
+- [ ] Sub-issues and issue relations (blocks / blocked by)
+- [ ] Cycles: time-boxed sprints with progress
+- [ ] Markdown in issue descriptions and comments
