@@ -69,6 +69,7 @@ Orbit takes [Linear](https://linear.app) as its reference: fast, keyboard-first 
 - [ ] Fix text inputs that sometimes don't take focus or the cursor when clicked
 - [ ] General UI/UX pass on the detail pane, sheets and Kanban drag and drop
 - [ ] Add screenshots to this README
+- [ ] Localization: English and Spanish, following the system language (today the UI mixes both)
 
 **Dates and reminders**
 - [ ] Due dates on issues
