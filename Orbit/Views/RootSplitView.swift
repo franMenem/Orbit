@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Shell 1b "Stage": two-column root shell (sidebar + content). The detail
 /// view is no longer a third NavigationSplitView column — it's an overlaid
@@ -12,6 +13,8 @@ struct RootSplitView: View {
     @State private var filterState = FilterState()
     @State private var cloudStatus = iCloudStatus()
     @Environment(AppActions.self) private var appActions  // owned by OrbitApp
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
 
     /// Workspace that owns the current selection — drives the centered
     /// titlebar label. Falls back across project/saved-view selection since
@@ -62,6 +65,12 @@ struct RootSplitView: View {
         .environment(selection)
         .environment(filterState)
         .environment(cloudStatus)
+        // Bandeja de entrada: importa las issues que dejó orbit_api, al
+        // arrancar y cada vez que la app vuelve a estar activa.
+        .task { InboxImporter.shared.importPendingFromUI(into: modelContext) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { InboxImporter.shared.importPendingFromUI(into: modelContext) }
+        }
         .sheet(isPresented: $actions.showCommandPalette) {
             // Width is owned by CommandPaletteView itself (420px per the
             // Nocturne sheet spec) — no outer frame override here.
