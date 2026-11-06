@@ -67,9 +67,18 @@ struct RootSplitView: View {
         .environment(cloudStatus)
         // Bandeja de entrada: importa las issues que dejó orbit_api, al
         // arrancar y cada vez que la app vuelve a estar activa.
-        .task { InboxImporter.shared.importPendingFromUI(into: modelContext) }
+        // Además: watcher en vivo del Inbox y snapshot Export/issues.json.
+        .task {
+            InboxSync.shared.importer.willDeleteIssue = { [selection] issue in
+                // Un `delete` desde la bandeja no debe dejar el panel de detalle apuntando a una issue borrada.
+                if selection.selectedIssue?.persistentModelID == issue.persistentModelID {
+                    selection.selectedIssue = nil
+                }
+            }
+            InboxSync.shared.startFromUI(context: modelContext)
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { InboxImporter.shared.importPendingFromUI(into: modelContext) }
+            if phase == .active, !InboxImporter.isRunningUnderTests { InboxSync.shared.importNow() }
         }
         .sheet(isPresented: $actions.showCommandPalette) {
             // Width is owned by CommandPaletteView itself (420px per the
