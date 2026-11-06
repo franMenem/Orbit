@@ -1,0 +1,69 @@
+import Foundation
+import os
+
+/// Vigila una carpeta con un `DispatchSource` de file-system y avisa (con
+/// debounce) cuando cambia su contenido. Crea la carpeta si no existe. Si la
+/// carpeta se borra o renombra, la recrea y vuelve a engancharse.
+final class InboxWatcher {
+    static let logger = Logger(subsystem: "com.fran.Orbit", category: "InboxWatcher")
+
+    let directory: URL
+    private let debounce: TimeInterval
+    private let onChange: () -> Void
+    private var source: DispatchSourceFileSystemObject?
+    private var pending: DispatchWorkItem?
+
+    init(directory: URL, debounce: TimeInterval = 0.4, onChange: @escaping () -> Void) {
+        self.directory = directory
+        self.debounce = debounce
+        self.onChange = onChange
+    }
+
+    deinit { stop() }
+
+    func start() {
+        guard source == nil else { return }
+        let fm = FileManager.default
+        do {
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            Self.logger.error("No se pudo crear \(self.directory.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            return
+        }
+        let fd = open(directory.path, O_EVTONLY)
+        guard fd >= 0 else {
+            Self.logger.error("No se pudo abrir \(self.directory.path, privacy: .public) para vigilarla")
+            return
+        }
+        let src = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fd,
+            eventMask: [.write, .extend, .rename, .delete, .link],
+            queue: .main)
+        src.setEventHandler { [weak self] in
+            guard let self, let src = self.source else { return }
+            if !src.data.isDisjoint(with: [.rename, .delete]) {
+                // La carpeta misma se movió/borró: re-enganchar sobre una nueva.
+                self.stop()
+                self.start()
+            }
+            self.schedule()
+        }
+        src.setCancelHandler { close(fd) }
+        source = src
+        src.resume()
+    }
+
+    func stop() {
+        pending?.cancel()
+        pending = nil
+        source?.cancel()
+        source = nil
+    }
+
+    private func schedule() {
+        pending?.cancel()
+        let item = DispatchWorkItem { [weak self] in self?.onChange() }
+        pending = item
+        DispatchQueue.main.asyncAfter(deadline: .now() + debounce, execute: item)
+    }
+}
