@@ -47,8 +47,8 @@ enum SeedData {
         let projSSJ = makeProject("General", workspace: ssj, context: context)
 
         makeIssue(
-            title: "Averiguar forma de prevenir gasto completo de créditos en OpenAI",
-            details: "Investigar límites de gasto, rate limits, y maneras de configurar alertas o caps en la API de OpenAI para evitar sorpresas en la factura.",
+            title: "Find a way to prevent fully burning through OpenAI credits",
+            details: "Research spending limits, rate limits, and ways to configure alerts or caps in the OpenAI API to avoid surprises on the bill.",
             status: .backlog,
             priority: .high,
             project: projSSJ,
@@ -56,8 +56,8 @@ enum SeedData {
             context: context
         )
         makeIssue(
-            title: "Métricas en dashboard",
-            details: "Definir y agregar las métricas clave que deben aparecer en el dashboard principal de la aplicación.",
+            title: "Dashboard metrics",
+            details: "Define and add the key metrics that should appear on the application's main dashboard.",
             status: .backlog,
             priority: .medium,
             project: projSSJ,

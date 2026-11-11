@@ -157,11 +157,11 @@ struct FilterBar: View {
         .fixedSize()
     }
 
-    /// `#191B28` no es uno de los tokens de superficie en Theme.swift (no es
-    /// `bg`/`bgDeep`/`bgBar`/`surface`); es el hex literal que el README §4 pide
-    /// puntualmente para el fondo del campo de búsqueda (mismo valor que usa
-    /// el buscador de la sidebar en §2). Local y anotado, según la regla del
-    /// contexto común.
+    /// `#191B28` is not one of the surface tokens in Theme.swift (it isn't
+    /// `bg`/`bgDeep`/`bgBar`/`surface`); it is the literal hex that README §4 asks for
+    /// specifically for the search field background (same value used by
+    /// the sidebar search in §2). Local and annotated, per the shared
+    /// context rule.
     private var searchFieldBackground: Color { Color(hex: "#191B28") }
 
     private var searchField: some View {
@@ -201,9 +201,9 @@ struct FilterBar: View {
         .help("Clear all filters")
     }
 
-    /// "Save View" pasa a outline acento cuando `filterState.isActive`
-    /// (README §4) — en la práctica siempre que esté visible, ya que solo se
-    /// renderiza dentro del `if filterState.isActive` de arriba.
+    /// "Save View" switches to an accent outline when `filterState.isActive`
+    /// (README §4) — in practice whenever it is visible, since it is only
+    /// rendered inside the `if filterState.isActive` above.
     private var saveButton: some View {
         Button { showSaveSheet = true } label: {
             Text("Save View")
@@ -237,8 +237,8 @@ private struct FilterPill: View {
     var active: Bool = false
     @State private var hovering = false
 
-    /// Un filtro con selección (count > 0) se ve "activo" igual que un toggle
-    /// explícito como "Solo abiertos" — mismo tratamiento visual en ambos casos.
+    /// A filter with a selection (count > 0) looks "active" just like an explicit
+    /// toggle such as "Open only" — same visual treatment in both cases.
     private var isActive: Bool { active || count > 0 }
 
     var body: some View {

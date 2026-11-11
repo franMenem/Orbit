@@ -34,9 +34,9 @@ enum ContainerFactory {
     ///   1. The app's entitlement for iCloud containers is present (set in Xcode)
     ///   2. The -OrbitLocalStore YES launch argument is NOT set
     static func make() -> ModelContainer {
-        // OrbitTests usa la app como test host: bajo XCTest el store es en
-        // memoria y sin CloudKit, así nunca se abre el store real de Fran
-        // (que puede estar en uso por la app corriendo en paralelo).
+        // OrbitTests uses the app as its test host: under XCTest the store is
+        // in-memory and without CloudKit, so the real store is never opened
+        // (it may be in use by the app running in parallel).
         if InboxImporter.isRunningUnderTests {
             let inMemory = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true, cloudKitDatabase: .none)
             return try! ModelContainer(for: schema, configurations: [inMemory])

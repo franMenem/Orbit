@@ -170,7 +170,7 @@ private struct SidebarSearchButton: View {
             HStack(spacing: 7) {
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 12))
-                Text("Buscar o saltar…")
+                Text("Search or jump to…")
                     .font(Nocturne.Font_.inter(12.5))
                 Spacer(minLength: 6)
                 Text("⌘K")
@@ -269,7 +269,7 @@ private struct WorkspaceRow: View {
                 .listRowSeparator(.hidden)
             }
             if workspace.unwrappedProjects.isEmpty {
-                Text("Sin proyectos")
+                Text("No projects")
                     .font(Nocturne.Font_.inter(11.5).italic())
                     .foregroundStyle(Nocturne.textFaint)
                     .padding(.leading, 24)
@@ -596,9 +596,9 @@ private struct SidebarFooter: View {
 
     private var label: String {
         switch status {
-        case .available:               "iCloud sincronizado"
+        case .available:               "iCloud synced"
         case .unavailable(let reason): reason
-        case .unknown:                 "Comprobando iCloud…"
+        case .unknown:                 "Checking iCloud…"
         }
     }
 

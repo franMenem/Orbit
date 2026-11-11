@@ -1,27 +1,27 @@
 import SwiftUI
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Nocturne — tokens del sistema de diseño traducidos a SwiftUI.
-// Fuente: design_handoff_orbit_redesign/Theme.swift (bundle de rediseño).
-// Regla: ningún hex suelto en las vistas. Todo sale de acá.
+// Nocturne — design-system tokens translated to SwiftUI.
+// Source: design_handoff_orbit_redesign/Theme.swift (redesign bundle).
+// Rule: no loose hex values in views. Everything comes from here.
 //
-// Nota de integración: los colores/glifos de IssueStatus e IssuePriority y los
-// componentes FadingRule / PriorityBars viven en DesignTokens.swift y
-// NocturneComponents.swift respectivamente (para no duplicar declaraciones
-// con el resto del sistema de diseño existente). Este archivo aporta los
-// tokens base (colores, tipografía, radios, elevación) y las piezas
-// reutilizables que no colisionan con esos dos archivos.
+// Integration note: the IssueStatus and IssuePriority colors/glyphs and the
+// FadingRule / PriorityBars components live in DesignTokens.swift and
+// NocturneComponents.swift respectively (to avoid duplicating declarations
+// with the existing design system). This file provides the
+// base tokens (colors, typography, radii, elevation) and the reusable
+// pieces that don't collide with those two files.
 // ─────────────────────────────────────────────────────────────────────────────
 
 enum Nocturne {
 
     // MARK: Grounds & surfaces
 
-    static let bg          = Color(hex: "#161826")  // columna de contenido
-    static let bgDeep      = Color(hex: "#12131F")  // sidebar, panel de detalle
-    static let bgBar       = Color(hex: "#141623")  // barra de filtros
-    static let surface     = Color(hex: "#1B1D2B")  // tarjetas, sheets, hover de fila
-    static let surfaceHi   = Color(hex: "#20222F")  // hover de tarjeta
+    static let bg          = Color(hex: "#161826")  // content column
+    static let bgDeep      = Color(hex: "#12131F")  // sidebar, detail panel
+    static let bgBar       = Color(hex: "#141623")  // filter bar
+    static let surface     = Color(hex: "#1B1D2B")  // cards, sheets, row hover
+    static let surfaceHi   = Color(hex: "#20222F")  // card hover
     static let titlebar    = Color(hex: "#1B1D2B")
 
     // MARK: Text
@@ -33,24 +33,24 @@ enum Nocturne {
 
     // MARK: Lines
 
-    static let divider     = Color(hex: "#212433")  // entre columnas
-    static let border      = Color(hex: "#262939")  // borde de control
+    static let divider     = Color(hex: "#212433")  // between columns
+    static let border      = Color(hex: "#262939")  // control border
     static let borderHover = Color(hex: "#3F424D")
-    static let rowLine     = Color(hex: "#1A1C29")  // entre filas de tabla
-    static let dashed      = Color(hex: "#2B2E3D")  // vacíos
+    static let rowLine     = Color(hex: "#1A1C29")  // between table rows
+    static let dashed      = Color(hex: "#2B2E3D")  // empty states
 
     // MARK: Accent
 
     static let accent      = Color(hex: "#9184D9")
-    static let accentText  = Color(hex: "#B5ABFC")  // texto sobre fondo oscuro
-    static let accentDeep  = Color(hex: "#5D5294")  // viñetas, marcas pequeñas
+    static let accentText  = Color(hex: "#B5ABFC")  // text on a dark background
+    static let accentDeep  = Color(hex: "#5D5294")  // bullets, small marks
     static let accentTint  = Color(hex: "#9184D9").opacity(0.14)  // hover outline
-    static let accentSel   = Color(hex: "#9184D9").opacity(0.13)  // fila seleccionada
+    static let accentSel   = Color(hex: "#9184D9").opacity(0.13)  // selected row
 
-    /// Único saturado fuera del acento — reservado a prioridad Urgent.
+    /// The only saturated color outside the accent — reserved for Urgent priority.
     static let urgent      = Color(hex: "#E8415B")
 
-    // MARK: Rampas (Nocturne, OKLCH sobre una misma escala de luminosidad)
+    // MARK: Ramps (Nocturne, OKLCH on a single luminosity scale)
 
     enum Neutral {
         static let n100 = Color(hex: "#F3F5FE"), n200 = Color(hex: "#E4E7F5")
@@ -71,11 +71,11 @@ enum Nocturne {
     // MARK: Type
 
     enum Font_ {
-        // Inter está empaquetada en Orbit/Fonts (400/500/600, TTF estáticos) y
-        // registrada vía INFOPLIST_KEY_ATSApplicationFontsPath. Los nombres
-        // PostScript de esos TTF son Inter-Regular / Inter-Medium /
-        // Inter-SemiBold; cualquier otro peso solicitado cae al más cercano
-        // de esos tres.
+        // Inter is bundled in Orbit/Fonts (400/500/600, static TTFs) and
+        // registered via INFOPLIST_KEY_ATSApplicationFontsPath. The PostScript
+        // names of those TTFs are Inter-Regular / Inter-Medium /
+        // Inter-SemiBold; any other requested weight falls back to the closest
+        // of those three.
         static func inter(_ size: CGFloat, _ weight: SwiftUI.Font.Weight = .regular) -> SwiftUI.Font {
             .custom(postScriptName(for: weight), size: size)
         }
@@ -111,7 +111,7 @@ enum Nocturne {
         static let sheet: CGFloat   = 14
     }
 
-    // MARK: Elevación — borde + oscuridad ambiente, nunca sombras apiladas
+    // MARK: Elevation — border + ambient darkness, never stacked shadows
 
     struct Elevation: ViewModifier {
         enum Level { case card, sheet, window }
@@ -141,7 +141,7 @@ extension View {
         modifier(Nocturne.Elevation(level: level))
     }
 
-    /// Marca de selección del sistema: fondo tenue + barra de acento de 2px.
+    /// System selection mark: faint background + 2px accent bar.
     func nocturneSelected(_ on: Bool, radius: CGFloat = Nocturne.Radius.row) -> some View {
         self.background(alignment: .leading) {
             if on {
@@ -158,7 +158,7 @@ extension View {
 // MARK: - Piezas reutilizables
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Botón primario del sistema: outline de acento, nunca relleno.
+/// System primary button: accent outline, never filled.
 struct OutlineAccentButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -176,13 +176,13 @@ struct OutlineAccentButtonStyle: ButtonStyle {
     }
 }
 
-// Nota: `NocturneLabelChip` se eliminó de acá — quedaba duplicado con
-// `Views/Labels/LabelChip.swift`, que ya implementa exactamente esta forma
-// (fondo 12.5%, borde 33%, radio pill, 10.5pt) y es el componente con el que
-// el resto de la app ya integra (IssueRow, IssueCard, LabelManagerView,
+// Note: `NocturneLabelChip` was removed from here — it duplicated
+// `Views/Labels/LabelChip.swift`, which already implements exactly this shape
+// (12.5% background, 33% border, pill radius, 10.5pt) and is the component the
+// rest of the app already integrates with (IssueRow, IssueCard, LabelManagerView,
 // IssueDetailView).
 
-/// Anillo de progreso del header de proyecto.
+/// Progress ring for the project header.
 struct ProgressRing: View {
     let fraction: Double
     var size: CGFloat = 26
@@ -198,7 +198,7 @@ struct ProgressRing: View {
     }
 }
 
-/// Header de sección en versalitas.
+/// Section header in small caps.
 struct SectionCaps: View {
     let text: String
     var body: some View {

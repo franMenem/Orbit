@@ -1,14 +1,14 @@
 import SwiftUI
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Nocturne — componentes compartidos chicos, consumidos por IssueRow,
-// IssueCard, IssueDetailView y los headers de la lista agrupada.
+// Nocturne — small shared components, consumed by IssueRow,
+// IssueCard, IssueDetailView and the grouped list headers.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Marca de señal de 3 barras — reemplaza las flechas de colores de prioridad.
-/// Ancho 2.5, alturas 4/6.5/9, gap 1.5, radio 1, alineadas abajo. Las barras
-/// activas (`priority.barCount`) toman `priority.color`; las inactivas quedan
-/// en `Nocturne.dashed`.
+/// 3-bar signal mark — replaces the colored priority arrows.
+/// Width 2.5, heights 4/6.5/9, gap 1.5, radius 1, bottom-aligned. The active
+/// bars (`priority.barCount`) take `priority.color`; the inactive ones stay
+/// at `Nocturne.dashed`.
 struct PriorityBars: View {
     let priority: IssuePriority
     private let heights: [CGFloat] = [4, 6.5, 9]
@@ -22,13 +22,13 @@ struct PriorityBars: View {
             }
         }
         .frame(height: 9)
-        .accessibilityLabel("Prioridad \(priority.displayName)")
+        .accessibilityLabel("Priority \(priority.displayName)")
     }
 }
 
-/// Línea horizontal de 1pt que se desvanece en los extremos — firma visual de
-/// Nocturne. Se usa en el header de grupo de la lista y entre secciones del
-/// detalle.
+/// 1pt horizontal line that fades out at the ends — Nocturne's visual
+/// signature. Used in the list's group header and between sections of the
+/// detail view.
 struct FadingRule: View {
     var color: Color = Nocturne.divider
     var inset: CGFloat = 36

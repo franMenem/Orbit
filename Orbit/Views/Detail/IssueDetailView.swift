@@ -550,7 +550,7 @@ private struct IssueSolutionSection: View {
 
             RichTextField(
                 text: $issue.solution,
-                placeholder: "Todavía sin documentar. Se incluye en Copy for AI cuando la escribas.",
+                placeholder: "Not documented yet. Included in Copy for AI once you write it.",
                 dashedWhenEmpty: true,
                 onCommit: onSave
             )

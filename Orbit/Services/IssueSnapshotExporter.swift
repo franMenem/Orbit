@@ -2,9 +2,9 @@ import Foundation
 import SwiftData
 import os
 
-/// Escribe `~/Library/Application Support/Orbit/Export/issues.json`: una foto
-/// de todas las issues, para que la API local de Python responda los GET sin
-/// abrir el store de SwiftData.
+/// Writes `~/Library/Application Support/Orbit/Export/issues.json`: a snapshot
+/// of all issues, so the local Python API can answer GETs without
+/// opening the SwiftData store.
 final class IssueSnapshotExporter {
 
     struct Row: Encodable {
@@ -36,7 +36,7 @@ final class IssueSnapshotExporter {
             try c.encode(solution, forKey: .solution)
             try c.encode(status, forKey: .status)
             try c.encode(priority, forKey: .priority)
-            try c.encode(dueDate, forKey: .dueDate)   // null explícito cuando no hay fecha
+            try c.encode(dueDate, forKey: .dueDate)   // explicit null when there is no date
             try c.encode(labels, forKey: .labels)
             try c.encode(createdAt, forKey: .createdAt)
             try c.encode(updatedAt, forKey: .updatedAt)
@@ -52,14 +52,14 @@ final class IssueSnapshotExporter {
 
     let exportURL: URL
 
-    /// Último contenido escrito: si no cambió, no se vuelve a escribir el archivo.
+    /// Last content written: if unchanged, the file is not written again.
     private var lastWritten: Data?
 
     init(exportURL: URL = IssueSnapshotExporter.defaultExportURL) {
         self.exportURL = exportURL
     }
 
-    /// Exporta todas las issues del contexto. Devuelve true si escribió el archivo.
+    /// Exports all issues in the context. Returns true if it wrote the file.
     @discardableResult
     func export(from context: ModelContext) -> Bool {
         do {
@@ -69,7 +69,7 @@ final class IssueSnapshotExporter {
             lastWritten = data
             return true
         } catch {
-            Self.logger.error("No se pudo exportar el snapshot: \(error.localizedDescription, privacy: .public)")
+            Self.logger.error("Could not export the snapshot: \(error.localizedDescription, privacy: .public)")
             return false
         }
     }
@@ -102,13 +102,13 @@ final class IssueSnapshotExporter {
             updatedAt: isoString(issue.updatedAt))
     }
 
-    /// "YYYY-MM-DD" en el calendario local (inversa de `InboxImporter.parseLocalDate`).
+    /// "YYYY-MM-DD" in the local calendar (inverse of `InboxImporter.parseLocalDate`).
     static func localDateString(_ date: Date) -> String {
         let c = Calendar.current.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
     }
 
-    /// ISO-8601 UTC sin fracciones, ej. "2026-11-06T09:00:00Z".
+    /// ISO-8601 UTC without fractions, e.g. "2026-11-06T09:00:00Z".
     static func isoString(_ date: Date) -> String {
         let f = ISO8601DateFormatter()
         f.formatOptions = [.withInternetDateTime]
@@ -116,9 +116,9 @@ final class IssueSnapshotExporter {
         return f.string(from: date)
     }
 
-    // MARK: - Escritura atómica
+    // MARK: - Atomic write
 
-    /// Temp en la misma carpeta + reemplazo: el lector de Python nunca ve un archivo a medias.
+    /// Temp file in the same folder + replace: the Python reader never sees a half-written file.
     private func write(_ data: Data) throws {
         let fm = FileManager.default
         let dir = exportURL.deletingLastPathComponent()

@@ -119,7 +119,7 @@ private struct BoardColumn: View {
             .strokeBorder(Nocturne.border, style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
             .frame(height: 72)
             .overlay(
-                Text("Arrastrá un issue acá")
+                Text("Drag an issue here")
                     .font(Nocturne.Font_.meta)
                     .foregroundStyle(Nocturne.textFaint)
             )

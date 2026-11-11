@@ -1,9 +1,9 @@
 import Foundation
 import os
 
-/// Vigila una carpeta con un `DispatchSource` de file-system y avisa (con
-/// debounce) cuando cambia su contenido. Crea la carpeta si no existe. Si la
-/// carpeta se borra o renombra, la recrea y vuelve a engancharse.
+/// Watches a folder with a file-system `DispatchSource` and notifies (with
+/// debounce) when its contents change. Creates the folder if it doesn't exist. If the
+/// folder is deleted or renamed, it recreates it and re-attaches.
 final class InboxWatcher {
     static let logger = Logger(subsystem: "com.fran.Orbit", category: "InboxWatcher")
 
@@ -27,12 +27,12 @@ final class InboxWatcher {
         do {
             try fm.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
-            Self.logger.error("No se pudo crear \(self.directory.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            Self.logger.error("Could not create \(self.directory.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
             return
         }
         let fd = open(directory.path, O_EVTONLY)
         guard fd >= 0 else {
-            Self.logger.error("No se pudo abrir \(self.directory.path, privacy: .public) para vigilarla")
+            Self.logger.error("Could not open \(self.directory.path, privacy: .public) to watch it")
             return
         }
         let src = DispatchSource.makeFileSystemObjectSource(
@@ -42,7 +42,7 @@ final class InboxWatcher {
         src.setEventHandler { [weak self] in
             guard let self, let src = self.source else { return }
             if !src.data.isDisjoint(with: [.rename, .delete]) {
-                // La carpeta misma se movió/borró: re-enganchar sobre una nueva.
+                // The folder itself was moved/deleted: re-attach to a new one.
                 self.stop()
                 self.start()
             }

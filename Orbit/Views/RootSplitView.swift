@@ -65,12 +65,12 @@ struct RootSplitView: View {
         .environment(selection)
         .environment(filterState)
         .environment(cloudStatus)
-        // Bandeja de entrada: importa las issues que dejó orbit_api, al
-        // arrancar y cada vez que la app vuelve a estar activa.
-        // Además: watcher en vivo del Inbox y snapshot Export/issues.json.
+        // Inbox: imports the issues left by orbit_api, on launch
+        // and every time the app becomes active again.
+        // Also: live Inbox watcher and Export/issues.json snapshot.
         .task {
             InboxSync.shared.importer.willDeleteIssue = { [selection] issue in
-                // Un `delete` desde la bandeja no debe dejar el panel de detalle apuntando a una issue borrada.
+                // A `delete` from the inbox must not leave the detail panel pointing at a deleted issue.
                 if selection.selectedIssue?.persistentModelID == issue.persistentModelID {
                     selection.selectedIssue = nil
                 }
@@ -90,28 +90,28 @@ struct RootSplitView: View {
 
 // MARK: - Detail Panel Overlay
 //
-// Shell 1b "Stage" (README §"Panel de detalle"): el detalle ya no es la
-// tercera columna del NavigationSplitView — es un panel de 540px que entra
-// desde el borde derecho sobre un backdrop semitransparente. Cerrar = click
-// en el backdrop, botón "Cerrar" dentro de IssueDetailView, o Escape.
+// Shell 1b "Stage" (README §"Detail panel"): the detail is no longer the
+// third column of the NavigationSplitView — it is a 540px panel that slides in
+// from the right edge over a semi-transparent backdrop. Close = click
+// on the backdrop, "Close" button inside IssueDetailView, or Escape.
 //
-// Fuente de verdad del estado del panel: `selection.selectedIssue` (no hay
-// `@State private var showDetailPanel` adicional). El README lo deja abierto
-// ("si selectedIssue alcanza como fuente de verdad, anotalo y no dupliques
-// estado") — duplicar el flag introduciría un segundo lugar para
-// desincronizarse de la selección real, por ejemplo cuando `NewIssueSheet`
-// hace `selection.selectedIssue = issue` al crear (ContentPaneView) o cuando
-// se selecciona una fila desde List/Board/Timeline vía el binding de
-// `Selection` — todos esos casos ya abren el panel gratis con este approach.
+// Source of truth for the panel state: `selection.selectedIssue` (there is no
+// additional `@State private var showDetailPanel`). The README leaves this open
+// ("if selectedIssue is enough as the source of truth, note it and don't duplicate
+// state") — duplicating the flag would introduce a second place to
+// get out of sync with the real selection, for example when `NewIssueSheet`
+// does `selection.selectedIssue = issue` on create (ContentPaneView) or when
+// a row is selected from List/Board/Timeline via the `Selection`
+// binding — all of those cases already open the panel for free with this approach.
 private struct DetailPanelOverlay: View {
     @Environment(Selection.self) private var selection
 
     var body: some View {
-        // El ZStack en sí es SIEMPRE parte del árbol (no está detrás de un
-        // `if` a este nivel) para que `.animation(value:)` pueda animar la
-        // entrada/salida de su contenido condicional sin depender de que
-        // cada call-site que toca `selectedIssue` recuerde envolver en
-        // `withAnimation` (List, NewIssueSheet, etc. no lo hacen).
+        // The ZStack itself is ALWAYS part of the tree (it is not behind an
+        // `if` at this level) so `.animation(value:)` can animate the
+        // entry/exit of its conditional content without depending on
+        // every call site that touches `selectedIssue` remembering to wrap in
+        // `withAnimation` (List, NewIssueSheet, etc. don't).
         ZStack(alignment: .trailing) {
             if selection.selectedIssue != nil {
                 Color(hex: "#08090F")

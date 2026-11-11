@@ -2,14 +2,14 @@ import Foundation
 import SwiftData
 import os
 
-/// Orquesta la sincronización con la API local: importa la bandeja (al
-/// arrancar, al activarse la app y en vivo con un watcher), y mantiene el
-/// snapshot `Export/issues.json` al día (tras cada import y tras cualquier
-/// save de la UI, con debounce).
+/// Orchestrates synchronization with the local API: imports the inbox (on
+/// launch, when the app becomes active and live via a watcher), and keeps the
+/// `Export/issues.json` snapshot up to date (after each import and after any
+/// UI save, with debounce).
 final class InboxSync {
     static let logger = Logger(subsystem: "com.fran.Orbit", category: "InboxSync")
 
-    /// Instancia compartida de la app (Inbox y Export reales).
+    /// Shared app instance (real Inbox and Export).
     static let shared = InboxSync()
 
     let importer: InboxImporter
@@ -32,28 +32,28 @@ final class InboxSync {
         self.watchDebounce = watchDebounce
     }
 
-    /// Punto de entrada de la UI: no hace nada bajo XCTest (no tocar Inbox/Export/store reales).
+    /// UI entry point: does nothing under XCTest (don't touch the real Inbox/Export/store).
     func startFromUI(context: ModelContext) {
         guard !InboxImporter.isRunningUnderTests else { return }
         start(context: context)
     }
 
-    /// Idempotente: la segunda llamada solo reintenta el import.
+    /// Idempotent: the second call only retries the import.
     func start(context: ModelContext) {
         guard self.context == nil else { importNow(); return }
         self.context = context
 
-        // Export al arrancar (antes del import: Python ya puede leer algo).
+        // Export on launch (before the import: Python can already read something).
         exporter.export(from: context)
 
-        // Cualquier save (UI o import) → export con debounce ~1 s.
+        // Any save (UI or import) → export with ~1 s debounce.
         saveObserver = NotificationCenter.default.addObserver(
             forName: ModelContext.didSave, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleExport() }
         }
 
-        // Live import: el watcher crea el Inbox si no existe.
+        // Live import: the watcher creates the Inbox if it doesn't exist.
         let w = InboxWatcher(directory: importer.inboxURL, debounce: watchDebounce) { [weak self] in
             self?.importNow()
         }
@@ -71,14 +71,14 @@ final class InboxSync {
         context = nil
     }
 
-    /// Trigger de launch / .active / watcher. El guard `isImporting` vive en el importer.
+    /// Trigger from launch / .active / watcher. The `isImporting` guard lives in the importer.
     func importNow() {
         guard let context else { return }
         let summary = importer.importPending(into: context)
         if summary.imported + summary.updated + summary.deleted + summary.duplicates + summary.failed > 0 {
-            Self.logger.notice("Import: \(summary.imported) creadas, \(summary.updated) actualizadas, \(summary.deleted) borradas, \(summary.failed) fallidas")
+            Self.logger.notice("Import: \(summary.imported) created, \(summary.updated) updated, \(summary.deleted) deleted, \(summary.failed) failed")
         }
-        exporter.export(from: context)   // si no cambió nada, no reescribe
+        exporter.export(from: context)   // if nothing changed, it doesn't rewrite
     }
 
     private func scheduleExport() {

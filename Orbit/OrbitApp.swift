@@ -10,8 +10,8 @@ struct OrbitApp: App {
 
     init() {
         #if os(macOS)
-        // OrbitTests usa la app como test host: bajo XCTest no mostramos
-        // ventanas ni Dock icon (la app corre invisible mientras dura el test run).
+        // OrbitTests uses the app as its test host: under XCTest we show no
+        // windows or Dock icon (the app runs invisibly for the duration of the test run).
         if InboxImporter.isRunningUnderTests {
             NSApplication.shared.setActivationPolicy(.prohibited)
         }

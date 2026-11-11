@@ -4,8 +4,8 @@ import SwiftUI
 import Testing
 @testable import Orbit
 
-/// Todos los tests usan un ModelContainer en memoria (sin CloudKit) y un
-/// directorio temporal propio: nunca tocan el Inbox real.
+/// All tests use an in-memory ModelContainer (no CloudKit) and their
+/// own temporary directory: they never touch the real Inbox.
 @MainActor
 struct InboxImporterTests {
 
@@ -72,7 +72,7 @@ struct InboxImporterTests {
 
         let id = "c0360e2a-a62c-49fe-a4bf-a2d47dea8232"
         let file = try write("""
-        {"title": "Revisar la configuración", "project": "Orbit", "details": "Detalle ñandú", "status": "inProgress", "priority": 3, "due_date": "2026-11-10", "id": "\(id)"}
+        {"title": "Review the café configuration", "project": "Orbit", "details": "Détail naïve façade", "status": "inProgress", "priority": 3, "due_date": "2026-11-10", "id": "\(id)"}
         """, named: "\(id).json", in: env.inbox)
 
         let summary = env.importer.importPending(into: env.context)
@@ -82,8 +82,8 @@ struct InboxImporterTests {
         let all = try issues(env.context)
         #expect(all.count == 1)
         let issue = try #require(all.first)
-        #expect(issue.title == "Revisar la configuración")
-        #expect(issue.details == "Detalle ñandú")
+        #expect(issue.title == "Review the café configuration")
+        #expect(issue.details == "Détail naïve façade")
         #expect(issue.status == .inProgress)
         #expect(issue.priority == .high)
         #expect(issue.dueDate == day(2026, 11, 10))
@@ -97,7 +97,7 @@ struct InboxImporterTests {
         let env = try makeEnv()
         defer { try? FileManager.default.removeItem(at: env.inbox) }
         try write("""
-        {"title": "Sin fecha", "project": "General", "details": "", "status": "backlog", "priority": 0, "due_date": null, "id": "\(UUID().uuidString)"}
+        {"title": "No date", "project": "General", "details": "", "status": "backlog", "priority": 0, "due_date": null, "id": "\(UUID().uuidString)"}
         """, in: env.inbox)
 
         let summary = env.importer.importPending(into: env.context)
@@ -113,19 +113,19 @@ struct InboxImporterTests {
     @Test func unknownProjectIsCreatedInFirstWorkspace() throws {
         let env = try makeEnv()
         defer { try? FileManager.default.removeItem(at: env.inbox) }
-        try write(#"{"title": "A", "project": "Proyecto Nuevo", "status": "todo", "priority": 1}"#, in: env.inbox)
-        try write(#"{"title": "B", "project": "  proyecto nuevo ", "status": "todo", "priority": 1}"#, in: env.inbox)
+        try write(#"{"title": "A", "project": "New Project", "status": "todo", "priority": 1}"#, in: env.inbox)
+        try write(#"{"title": "B", "project": "  new project ", "status": "todo", "priority": 1}"#, in: env.inbox)
 
         let summary = env.importer.importPending(into: env.context)
 
         #expect(summary.imported == 2)
         let projects = try env.context.fetch(FetchDescriptor<Project>())
-        #expect(projects.count == 1)   // el segundo matchea case-insensitive + trim
+        #expect(projects.count == 1)   // the second one matches case-insensitively + trimmed
         let project = try #require(projects.first)
-        #expect(project.name == "Proyecto Nuevo")
+        #expect(project.name == "New Project")
         #expect(project.workspace?.persistentModelID == env.workspace.persistentModelID)
         #expect(project.unwrappedIssues.count == 2)
-        #expect(Set(project.unwrappedIssues.map(\.code)) == ["PRO-1", "PRO-2"])
+        #expect(Set(project.unwrappedIssues.map(\.code)) == ["NEW-1", "NEW-2"])
     }
 
     @Test func existingProjectMatchesCaseInsensitiveAndTrimmed() throws {
@@ -146,19 +146,19 @@ struct InboxImporterTests {
     @Test func invalidFilesGoToFailedAndOthersStillImport() throws {
         let env = try makeEnv()
         defer { try? FileManager.default.removeItem(at: env.inbox) }
-        try write("esto no es json", named: "malo1.json", in: env.inbox)
-        try write(#"{"title": "X", "project": "P", "status": "nope", "priority": 1}"#, named: "malo2.json", in: env.inbox)
-        try write(#"{"title": "X", "project": "P", "due_date": "2026-13-45"}"#, named: "malo3.json", in: env.inbox)
-        try write(#"{"title": "   ", "project": "P"}"#, named: "malo4.json", in: env.inbox)
-        try write(#"{"title": "Bueno", "project": "P"}"#, named: "bueno.json", in: env.inbox)
+        try write("this is not json", named: "bad1.json", in: env.inbox)
+        try write(#"{"title": "X", "project": "P", "status": "nope", "priority": 1}"#, named: "bad2.json", in: env.inbox)
+        try write(#"{"title": "X", "project": "P", "due_date": "2026-13-45"}"#, named: "bad3.json", in: env.inbox)
+        try write(#"{"title": "   ", "project": "P"}"#, named: "bad4.json", in: env.inbox)
+        try write(#"{"title": "Good", "project": "P"}"#, named: "good.json", in: env.inbox)
 
         let summary = env.importer.importPending(into: env.context)
 
         #expect(summary.failed == 4)
         #expect(summary.imported == 1)
-        #expect(try issues(env.context).map(\.title) == ["Bueno"])
+        #expect(try issues(env.context).map(\.title) == ["Good"])
         #expect(files(in: env.inbox) == ["Failed"])
-        #expect(files(in: env.importer.failedURL) == ["malo1.json", "malo2.json", "malo3.json", "malo4.json"])
+        #expect(files(in: env.importer.failedURL) == ["bad1.json", "bad2.json", "bad3.json", "bad4.json"])
     }
 
     @Test func missingFolderIsNoOp() throws {
@@ -188,7 +188,7 @@ struct InboxImporterTests {
         let json = #"{"title": "A", "project": "P", "id": "\#(UUID().uuidString)"}"#
         let f1 = try write(json, named: "a.json", in: env.inbox)
         env.importer.importPending(into: env.context)
-        // Simula crash entre save y borrado: el archivo reaparece.
+        // Simulates a crash between save and delete: the file reappears.
         try json.write(to: f1, atomically: true, encoding: .utf8)
 
         let summary = env.importer.importPending(into: env.context)
@@ -201,21 +201,21 @@ struct InboxImporterTests {
     @Test func ignoresNonJsonFilesAndFailedFolder() throws {
         let env = try makeEnv()
         defer { try? FileManager.default.removeItem(at: env.inbox) }
-        try write("hola", named: "notas.txt", in: env.inbox)
+        try write("hello", named: "notes.txt", in: env.inbox)
         try FileManager.default.createDirectory(at: env.importer.failedURL, withIntermediateDirectories: true)
-        try write("roto", named: "viejo.json", in: env.importer.failedURL)
+        try write("broken", named: "old.json", in: env.importer.failedURL)
 
         let summary = env.importer.importPending(into: env.context)
 
         #expect(summary == InboxImporter.Summary())
-        #expect(files(in: env.inbox) == ["Failed", "notas.txt"])
-        #expect(files(in: env.importer.failedURL) == ["viejo.json"])
+        #expect(files(in: env.inbox) == ["Failed", "notes.txt"])
+        #expect(files(in: env.importer.failedURL) == ["old.json"])
     }
 
     // MARK: - Helpers (acciones, labels, snapshot)
 
-    /// Escribe un archivo con fecha de creación explícita, para que el orden
-    /// "más viejo primero" sea determinista en los tests.
+    /// Writes a file with an explicit creation date, so the
+    /// "oldest first" order is deterministic in tests.
     @discardableResult
     private func writeAt(_ seconds: TimeInterval, _ json: String, in inbox: URL) throws -> URL {
         let url = try write(json, in: inbox)
@@ -261,34 +261,34 @@ struct InboxImporterTests {
         try env.context.save()
 
         try write("""
-        {"action": "create", "title": "A", "project": "Orbit", "solution": "Reiniciar", "labels": ["  bug ", "api", "API", "   ", ""]}
+        {"action": "create", "title": "A", "project": "Orbit", "solution": "Restart", "labels": ["  bug ", "api", "API", "   ", ""]}
         """, in: env.inbox)
 
         let summary = env.importer.importPending(into: env.context)
 
         #expect(summary.imported == 1)
         let i = try #require(try issues(env.context).first)
-        #expect(i.solution == "Reiniciar")
-        #expect(labelNames(i) == ["Bug", "api"])   // "bug" matcheó el existente; "api"/"API" colapsan
+        #expect(i.solution == "Restart")
+        #expect(labelNames(i) == ["Bug", "api"])   // "bug" matched the existing one; "api"/"API" collapse
         let all = try env.context.fetch(FetchDescriptor<Orbit.Label>())
         #expect(all.count == 2)
         let api = try #require(all.first { $0.name == "api" })
         #expect(api.workspace?.persistentModelID == env.workspace.persistentModelID)
         #expect(api.colorHex == SwiftUI.Color.labelPalette[0].hex)
-        #expect(existing.issues?.count == 1)   // ambos lados de la relación
+        #expect(existing.issues?.count == 1)   // both sides of the relationship
     }
 
     @Test func absentActionIsCreateAndInvalidActionFails() throws {
         let env = try makeEnv()
         defer { try? FileManager.default.removeItem(at: env.inbox) }
-        try write(#"{"title": "Sin action", "project": "P"}"#, named: "ok.json", in: env.inbox)
+        try write(#"{"title": "No action", "project": "P"}"#, named: "ok.json", in: env.inbox)
         try write(#"{"action": "explode", "title": "X", "project": "P"}"#, named: "bad.json", in: env.inbox)
 
         let summary = env.importer.importPending(into: env.context)
 
         #expect(summary.imported == 1)
         #expect(summary.failed == 1)
-        #expect(try issues(env.context).map(\.title) == ["Sin action"])
+        #expect(try issues(env.context).map(\.title) == ["No action"])
         #expect(files(in: env.importer.failedURL) == ["bad.json"])
     }
 
@@ -303,12 +303,12 @@ struct InboxImporterTests {
         i.updatedAt = Date(timeIntervalSince1970: 0)
         try env.context.save()
 
-        let file = try write(#"{"action": "update", "id": "\#(UUID().uuidString)", "code": "ORB-1", "status": "done", "solution": "Listo"}"#, in: env.inbox)
+        let file = try write(#"{"action": "update", "id": "\#(UUID().uuidString)", "code": "ORB-1", "status": "done", "solution": "Ready"}"#, in: env.inbox)
         let summary = env.importer.importPending(into: env.context)
 
         #expect(summary.updated == 1)
         #expect(i.status == .done)
-        #expect(i.solution == "Listo")
+        #expect(i.solution == "Ready")
         #expect(i.title == "Original")
         #expect(i.details == "d")
         #expect(i.priority == .low)
@@ -325,9 +325,9 @@ struct InboxImporterTests {
         i.dueDate = day(2026, 11, 10)
         try env.context.save()
 
-        try writeAt(0, #"{"action": "update", "code": "orb-1", "title": " Nuevo ", "details": "dd", "priority": 4, "due_date": "2026-12-01"}"#, in: env.inbox)
+        try writeAt(0, #"{"action": "update", "code": "orb-1", "title": " New ", "details": "dd", "priority": 4, "due_date": "2026-12-01"}"#, in: env.inbox)
         env.importer.importPending(into: env.context)
-        #expect(i.title == "Nuevo")
+        #expect(i.title == "New")
         #expect(i.details == "dd")
         #expect(i.priority == .urgent)
         #expect(i.dueDate == day(2026, 12, 1))
@@ -363,10 +363,10 @@ struct InboxImporterTests {
         let orbit = try seedProject(env)
         let i = try addIssue(env, orbit)
 
-        try write(#"{"action": "update", "code": "ORB-1", "project": "Otro Proyecto"}"#, in: env.inbox)
+        try write(#"{"action": "update", "code": "ORB-1", "project": "Other Project"}"#, in: env.inbox)
         env.importer.importPending(into: env.context)
 
-        #expect(i.project?.name == "Otro Proyecto")
+        #expect(i.project?.name == "Other Project")
         #expect(i.code == "ORB-1")
         #expect(orbit.unwrappedIssues.isEmpty)
         #expect(i.project?.unwrappedIssues.count == 1)
@@ -399,7 +399,7 @@ struct InboxImporterTests {
         label.workspace = env.workspace
         env.context.insert(label)
         i.labels = [label]; label.issues = [i]
-        let comment = Orbit.Comment(text: "hola"); comment.issue = i; env.context.insert(comment)
+        let comment = Orbit.Comment(text: "hello"); comment.issue = i; env.context.insert(comment)
         let att = Orbit.Attachment(filename: "f", contentType: "text/plain", data: Data([1])); att.issue = i; env.context.insert(att)
         try env.context.save()
 
@@ -421,13 +421,13 @@ struct InboxImporterTests {
     @Test func createThenUpdateThenDeleteApplyInOrder() throws {
         let env = try makeEnv()
         defer { try? FileManager.default.removeItem(at: env.inbox) }
-        // Nombres que ordenarían al revés alfabéticamente: manda la fecha de creación.
+        // Names that would sort in reverse alphabetical order: creation date takes precedence.
         try writeAt(2, #"{"action": "update", "code": "ORB-1", "status": "done", "labels": ["l"]}"#, in: env.inbox)
-        try writeAt(1, #"{"action": "create", "title": "Nueva", "project": "Orbit"}"#, in: env.inbox)
+        try writeAt(1, #"{"action": "create", "title": "Newer", "project": "Orbit"}"#, in: env.inbox)
 
         let summary = env.importer.importPending(into: env.context)
 
-        // Orden de procesamiento: create (t=1) y luego update (t=2).
+        // Processing order: create (t=1) and then update (t=2).
         #expect(summary.imported == 1)
         #expect(summary.updated == 1)
         #expect(summary.failed == 0)
@@ -450,26 +450,26 @@ struct InboxImporterTests {
         defer { try? FileManager.default.removeItem(at: exportURL.deletingLastPathComponent().deletingLastPathComponent()) }
         let exporter = IssueSnapshotExporter(exportURL: exportURL)
 
-        try writeAt(0, #"{"action": "create", "title": "Primera", "project": "Orbit", "details": "d", "solution": "s", "status": "inProgress", "priority": 3, "due_date": "2026-11-10", "labels": ["bug", "api"]}"#, in: env.inbox)
+        try writeAt(0, #"{"action": "create", "title": "First", "project": "Orbit", "details": "d", "solution": "s", "status": "inProgress", "priority": 3, "due_date": "2026-11-10", "labels": ["bug", "api"]}"#, in: env.inbox)
         try writeAt(1, #"{"action": "create", "title": "Segunda", "project": "Orbit"}"#, in: env.inbox)
         try writeAt(2, #"{"action": "create", "title": "Tercera", "project": "Orbit"}"#, in: env.inbox)
         try writeAt(3, #"{"action": "delete", "code": "ORB-3"}"#, in: env.inbox)
         env.importer.importPending(into: env.context)
-        // Fechas de creación distintas y conocidas para verificar el orden.
+        // Distinct, known creation dates to verify the order.
         for (n, i) in try issues(env.context).sorted(by: { $0.code < $1.code }).enumerated() {
-            i.createdAt = Date(timeIntervalSince1970: 1_700_000_000 - Double(n) * 100)   // ORB-1 el más nuevo
+            i.createdAt = Date(timeIntervalSince1970: 1_700_000_000 - Double(n) * 100)   // ORB-1 is the newest
             i.updatedAt = Date(timeIntervalSince1970: 1_700_000_000)
         }
         try env.context.save()
 
         #expect(exporter.export(from: env.context))
-        #expect(!exporter.export(from: env.context))   // sin cambios: no reescribe
+        #expect(!exporter.export(from: env.context))   // unchanged: doesn't rewrite
 
         let data = try Data(contentsOf: exportURL)
         let rows = try #require(try JSONSerialization.jsonObject(with: data) as? [[String: Any]])
-        #expect(rows.map { $0["code"] as? String } == ["ORB-2", "ORB-1"])   // sin la borrada, por created_at
+        #expect(rows.map { $0["code"] as? String } == ["ORB-2", "ORB-1"])   // without the deleted one, by created_at
         let first = rows[1]
-        #expect(first["title"] as? String == "Primera")
+        #expect(first["title"] as? String == "First")
         #expect(first["project"] as? String == "Orbit")
         #expect(first["details"] as? String == "d")
         #expect(first["solution"] as? String == "s")
@@ -480,9 +480,9 @@ struct InboxImporterTests {
         #expect(first["created_at"] as? String == "2023-11-14T22:13:20Z")
         #expect(first["updated_at"] as? String == "2023-11-14T22:13:20Z")
         #expect(Set(first.keys) == ["code", "title", "project", "details", "solution", "status", "priority", "due_date", "labels", "created_at", "updated_at"])
-        // due_date ausente → null explícito
+        // absent due_date → explicit null
         #expect(rows[0]["due_date"] is NSNull)
-        // sin archivos temporales colgados
+        // no leftover temp files
         #expect(files(in: exportURL.deletingLastPathComponent()) == ["issues.json"])
     }
 
@@ -493,7 +493,7 @@ struct InboxImporterTests {
             .appendingPathComponent("OrbitExportTests-\(UUID().uuidString)/Export/issues.json")
         defer { try? FileManager.default.removeItem(at: exportURL.deletingLastPathComponent().deletingLastPathComponent()) }
         let project = try seedProject(env)
-        let i = try addIssue(env, project, title: "Antes")
+        let i = try addIssue(env, project, title: "Before")
 
         let sync = InboxSync(importer: env.importer,
                              exporter: IssueSnapshotExporter(exportURL: exportURL),
@@ -506,12 +506,12 @@ struct InboxImporterTests {
                   let rows = try? JSONSerialization.jsonObject(with: d) as? [[String: Any]] else { return [] }
             return rows.compactMap { $0["title"] as? String }
         }
-        #expect(titles() == ["Antes"])   // export al arrancar
+        #expect(titles() == ["Before"])   // export on launch
 
-        // Cambio "de la UI": edit + save → didSave → export con debounce.
-        i.title = "Después"
+        // Change "from the UI": edit + save → didSave → export with debounce.
+        i.title = "Later"
         try env.context.save()
-        #expect(await eventually { titles() == ["Después"] })
+        #expect(await eventually { titles() == ["Later"] })
     }
 
     // MARK: - Watcher / live import
@@ -526,7 +526,7 @@ struct InboxImporterTests {
     }
 
     @Test func watcherPicksUpNewFileAndCreatesMissingFolder() async throws {
-        let env = try makeEnv(createInboxDir: false)   // la carpeta no existe: el watcher la crea
+        let env = try makeEnv(createInboxDir: false)   // the folder doesn't exist: the watcher creates it
         defer { try? FileManager.default.removeItem(at: env.inbox) }
         let exportURL = env.inbox.deletingLastPathComponent()
             .appendingPathComponent("OrbitExportTests-\(UUID().uuidString)/Export/issues.json")
@@ -539,10 +539,10 @@ struct InboxImporterTests {
         defer { sync.stop() }
         #expect(FileManager.default.fileExists(atPath: env.inbox.path))
 
-        let file = try write(#"{"title": "En vivo", "project": "Live"}"#, in: env.inbox)
+        let file = try write(#"{"title": "Live", "project": "Live"}"#, in: env.inbox)
 
         #expect(await eventually { (try? self.issues(env.context).count) == 1 })
         #expect(await eventually { !FileManager.default.fileExists(atPath: file.path) })
-        #expect(await eventually { (try? String(contentsOf: exportURL, encoding: .utf8))?.contains("En vivo") == true })
+        #expect(await eventually { (try? String(contentsOf: exportURL, encoding: .utf8))?.contains("Live") == true })
     }
 }

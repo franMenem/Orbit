@@ -28,8 +28,8 @@ struct ContentPaneView: View {
                 )
             }
         }
-        // "fondo de la columna Nocturne.bg" (README §3) — se aplica acá arriba
-        // de todo para cubrir las tres ramas (proyecto, saved view, vacío).
+        // "column background Nocturne.bg" (README §3) — applied here at the very
+        // top to cover all three branches (project, saved view, empty).
         .background(Nocturne.bg)
         .onChange(of: appActions.createIssueSignal) { handleCreateIssue() }
         .onChange(of: appActions.pendingMode)       { handlePendingMode() }
@@ -80,21 +80,21 @@ private struct ProjectHeader: View {
     private var total: Int { issues.count }
     private var inProgressCount: Int { issues.filter { $0.status == .inProgress }.count }
 
-    /// "Cerrados" en el resumen agrupa Done + Cancelled (README §3: "1 cerrados").
+    /// "Closed" in the summary groups Done + Cancelled (README §3: "1 closed").
     private var closedCount: Int {
         issues.filter { $0.status == .done || $0.status == .cancelled }.count
     }
 
-    /// Criterio del anillo de progreso: numerador = solo `.done`. Cancelled
-    /// cuenta como "cerrado" en el resumen de texto de arriba, pero no como
-    /// avance real, así que no infla el arco (a diferencia de `closedCount`).
+    /// Progress ring criterion: numerator = `.done` only. Cancelled
+    /// counts as "closed" in the text summary above, but not as
+    /// real progress, so it doesn't inflate the arc (unlike `closedCount`).
     private var doneFraction: Double {
         guard total > 0 else { return 0 }
         return Double(issues.filter { $0.status == .done }.count) / Double(total)
     }
 
     private var summaryText: String {
-        "\(total) issues · \(inProgressCount) en progreso · \(closedCount) cerrados"
+        "\(total) issues · \(inProgressCount) in progress · \(closedCount) closed"
     }
 
     var body: some View {
@@ -141,7 +141,7 @@ private struct ProjectHeader: View {
                 Text("\(pct)%")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Nocturne.text)
-                Text("completado")
+                Text("completed")
                     .font(Nocturne.Font_.chip)
                     .foregroundStyle(Nocturne.textDim)
             }
@@ -155,10 +155,10 @@ private struct ProjectHeader: View {
     }
 
     private var newIssueButton: some View {
-        // OutlineAccentButtonStyle ya aplica radio 8, padding 7/12 y
-        // texto 12.5pt/500 — coincide exacto con el spec, sin overrides.
+        // OutlineAccentButtonStyle already applies radius 8, padding 7/12 and
+        // text 12.5pt/500 — matches the spec exactly, no overrides.
         Button(action: onNewIssue) {
-            SwiftUI.Label("Nuevo issue", systemImage: "plus")
+            SwiftUI.Label("New Issue", systemImage: "plus")
         }
         .buttonStyle(OutlineAccentButtonStyle())
     }
@@ -199,12 +199,12 @@ private struct ProjectContentView: View {
 }
 
 // MARK: - ContentModeTabs
-// Shell 1b "Stage": reemplaza el Picker segmentado del toolbar por tabs
-// propias List / Board / Timeline dentro del área de contenido (README §
-// "Interactions & Behavior" — "Cambio de vista"). Subrayado de 2px animado
-// con matchedGeometryEffect (~200ms). ⌘1/⌘2/⌘3 siguen andando vía
-// `appActions.pendingMode`, consumido por `handlePendingMode()` arriba —
-// esta vista solo refleja/edita el mismo `@Binding mode`.
+// Shell 1b "Stage": replaces the toolbar's segmented Picker with custom
+// List / Board / Timeline tabs inside the content area (README §
+// "Interactions & Behavior" — "View switching"). Animated 2px underline
+// with matchedGeometryEffect (~200ms). ⌘1/⌘2/⌘3 keep working via
+// `appActions.pendingMode`, consumed by `handlePendingMode()` above —
+// this view only reflects/edits the same `@Binding mode`.
 
 private struct ContentModeTabs: View {
     @Binding var mode: ContentViewMode

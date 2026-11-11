@@ -3,23 +3,23 @@ import SwiftData
 import SwiftUI
 import os
 
-/// Aplica a SwiftData los comandos que la API local de Orbit (orbit_api) deja
-/// como archivos JSON en `~/Library/Application Support/Orbit/Inbox/`.
+/// Applies to SwiftData the commands that Orbit's local API (orbit_api) leaves
+/// as JSON files in `~/Library/Application Support/Orbit/Inbox/`.
 ///
-/// Cada archivo tiene una `"action"` opcional: `create` (default si falta),
-/// `update` o `delete`. Los archivos se procesan del más viejo al más nuevo,
-/// así un create seguido de un update sobre la misma issue se aplica en orden.
+/// Each file has an optional `"action"`: `create` (default if missing),
+/// `update` or `delete`. Files are processed from oldest to newest,
+/// so a create followed by an update on the same issue is applied in order.
 ///
-/// Contrato por archivo:
-///  - Se decodifica, se aplica el comando (create = igual que
-///    `NewIssueSheet.create()`; update = campos presentes; delete = igual que
-///    `IssueListView.deleteSelected()`), se hace `save()` y SOLO después de un
-///    save exitoso se borra el archivo.
-///  - Si el archivo es inválido o el import falla, se mueve a `Inbox/Failed/`
-///    y se loguea el error. Un archivo malo no frena a los demás.
-///  - Si todavía no existe ningún workspace (primer arranque, antes del seed)
-///    el archivo se deja intacto en el Inbox y se reintenta en la próxima
-///    activación; no es un error del archivo.
+/// Per-file contract:
+///  - The file is decoded, the command is applied (create = same as
+///    `NewIssueSheet.create()`; update = fields present; delete = same as
+///    `IssueListView.deleteSelected()`), `save()` is called, and ONLY after a
+///    successful save is the file deleted.
+///  - If the file is invalid or the import fails, it is moved to `Inbox/Failed/`
+///    and the error is logged. One bad file doesn't stop the others.
+///  - If no workspace exists yet (first launch, before the seed)
+///    the file is left untouched in the Inbox and retried on the next
+///    activation; this is not an error in the file.
 final class InboxImporter {
 
     // MARK: - Types
@@ -27,9 +27,9 @@ final class InboxImporter {
     struct Summary: Equatable {
         var imported = 0
         var failed = 0
-        /// Dejados en el Inbox para reintentar más tarde (ej. no hay workspace todavía).
+        /// Left in the Inbox to retry later (e.g. no workspace yet).
         var deferred = 0
-        /// Ya estaban importados (mismo id): solo se borró el archivo.
+        /// Already imported (same id): only the file was deleted.
         var duplicates = 0
         var updated = 0
         var deleted = 0
@@ -48,15 +48,15 @@ final class InboxImporter {
 
         var errorDescription: String? {
             switch self {
-            case .emptyTitle:               "title vacío"
-            case .emptyProjectName:         "project vacío"
-            case .invalidDueDate(let s):    "due_date inválida: \(s)"
-            case .noWorkspace:              "no hay ningún workspace donde crear el proyecto"
-            case .invalidAction(let a):     "action inválida: \(a)"
-            case .emptyCode:                "code vacío"
-            case .unknownCode(let c):       "no existe ninguna issue con code \(c)"
-            case .ambiguousCode(let c):     "hay más de una issue con code \(c)"
-            case .projectWithoutWorkspace:  "el proyecto no tiene workspace (no se pueden resolver labels)"
+            case .emptyTitle:               "empty title"
+            case .emptyProjectName:         "empty project"
+            case .invalidDueDate(let s):    "invalid due_date: \(s)"
+            case .noWorkspace:              "there is no workspace to create the project in"
+            case .invalidAction(let a):     "invalid action: \(a)"
+            case .emptyCode:                "empty code"
+            case .unknownCode(let c):       "no issue exists with code \(c)"
+            case .ambiguousCode(let c):     "more than one issue has code \(c)"
+            case .projectWithoutWorkspace:  "the project has no workspace (labels cannot be resolved)"
             }
         }
     }
@@ -65,8 +65,8 @@ final class InboxImporter {
         case create, update, delete
     }
 
-    /// Forma del JSON de un `create`. `status`/`priority` desconocidos hacen
-    /// fallar el decode (el archivo va a Failed/).
+    /// Shape of a `create` JSON. Unknown `status`/`priority` values make
+    /// the decode fail (the file goes to Failed/).
     struct Payload: Decodable {
         let id: UUID?
         let title: String
@@ -97,9 +97,9 @@ final class InboxImporter {
         }
     }
 
-    /// Forma del JSON de un `update`: solo se cambian las claves presentes
-    /// (una clave con `null` cuenta como ausente, salvo `due_date`, donde
-    /// `null` borra la fecha).
+    /// Shape of an `update` JSON: only the keys present are changed
+    /// (a key with `null` counts as absent, except `due_date`, where
+    /// `null` clears the date).
     struct UpdatePayload: Decodable {
         enum DueDate: Equatable { case unchanged, clear, set(String) }
 
@@ -148,15 +148,15 @@ final class InboxImporter {
 
     static let logger = Logger(subsystem: "com.fran.Orbit", category: "InboxImporter")
 
-    /// `~/Library/Application Support/Orbit/Inbox` — la app NO está sandboxed,
-    /// así que `homeDirectoryForCurrentUser` es el home real (el mismo que usa la API).
+    /// `~/Library/Application Support/Orbit/Inbox` — the app is NOT sandboxed,
+    /// so `homeDirectoryForCurrentUser` is the real home (the same one the API uses).
     static var defaultInboxURL: URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Orbit/Inbox", isDirectory: true)
     }
 
-    /// El target OrbitTests usa la app como test host: al arrancar, la UI NO
-    /// debe importar del Inbox real ni tocar el store real durante los tests.
+    /// The OrbitTests target uses the app as its test host: on launch, the UI must NOT
+    /// import from the real Inbox or touch the real store during tests.
     static var isRunningUnderTests: Bool {
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
@@ -164,12 +164,12 @@ final class InboxImporter {
     let inboxURL: URL
     var failedURL: URL { inboxURL.appendingPathComponent("Failed", isDirectory: true) }
 
-    /// Guard anti doble import (launch + scenePhase .active casi juntos).
-    /// Todo corre en el main actor y el import es síncrono, así que alcanza con un Bool.
+    /// Guard against a double import (launch + scenePhase .active almost together).
+    /// Everything runs on the main actor and the import is synchronous, so a Bool is enough.
     private var isImporting = false
 
-    /// Se llama justo antes de borrar una issue por un comando `delete`, para
-    /// que la UI suelte referencias (ej. `selection.selectedIssue`).
+    /// Called right before an issue is deleted by a `delete` command, so
+    /// the UI can drop references (e.g. `selection.selectedIssue`).
     var willDeleteIssue: ((Issue) -> Void)?
 
     init(inboxURL: URL = InboxImporter.defaultInboxURL) {
@@ -188,21 +188,21 @@ final class InboxImporter {
         let fm = FileManager.default
         var isDir: ObjCBool = false
         guard fm.fileExists(atPath: inboxURL.path, isDirectory: &isDir), isDir.boolValue else {
-            return summary   // sin carpeta = nada que hacer
+            return summary   // no folder = nothing to do
         }
 
         let files: [URL]
         do {
             files = try pendingFiles()
         } catch {
-            Self.logger.error("No se pudo listar el Inbox: \(error.localizedDescription, privacy: .public)")
+            Self.logger.error("Could not list the Inbox: \(error.localizedDescription, privacy: .public)")
             return summary
         }
 
         for file in files {
             do {
                 let outcome = try importFile(file, into: context)
-                try fm.removeItem(at: file)   // recién después del save exitoso
+                try fm.removeItem(at: file)   // only after a successful save
                 switch outcome {
                 case .imported:  summary.imported += 1
                 case .duplicate: summary.duplicates += 1
@@ -211,10 +211,10 @@ final class InboxImporter {
                 }
             } catch ImportError.noWorkspace {
                 summary.deferred += 1
-                Self.logger.notice("Import diferido (sin workspace): \(file.lastPathComponent, privacy: .public)")
+                Self.logger.notice("Import deferred (no workspace): \(file.lastPathComponent, privacy: .public)")
             } catch {
                 summary.failed += 1
-                Self.logger.error("Falló \(file.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+                Self.logger.error("Failed \(file.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 moveToFailed(file)
             }
         }
@@ -225,7 +225,7 @@ final class InboxImporter {
 
     private enum Outcome { case imported, duplicate, updated, deleted }
 
-    /// `*.json` regulares del Inbox (sin subcarpetas como Failed/), los más viejos primero.
+    /// Regular `*.json` files in the Inbox (no subfolders like Failed/), oldest first.
     private func pendingFiles() throws -> [URL] {
         let keys: [URLResourceKey] = [.isRegularFileKey, .creationDateKey]
         let urls = try FileManager.default.contentsOfDirectory(
@@ -271,7 +271,7 @@ final class InboxImporter {
         guard !projectName.isEmpty else { throw ImportError.emptyProjectName }
         let dueDate = try payload.dueDate.map(Self.parseLocalDate)
 
-        // Idempotencia: si ya se importó (ej. crash entre save y borrado), no duplicar.
+        // Idempotency: if it was already imported (e.g. crash between save and delete), don't duplicate.
         if let id = payload.id {
             let existing = try context.fetchCount(FetchDescriptor<Issue>(predicate: #Predicate { $0.id == id }))
             if existing > 0 { return .duplicate }
@@ -279,7 +279,7 @@ final class InboxImporter {
 
         let (project, createdProject) = try resolveProject(named: projectName, in: context)
 
-        // Mismo camino que NewIssueSheet.create().
+        // Same path as NewIssueSheet.create().
         let issue = Issue(title: title)
         if let id = payload.id { issue.id = id }
         issue.details  = payload.details.trimmingCharacters(in: .whitespaces)
@@ -303,7 +303,7 @@ final class InboxImporter {
             }
             try context.save()
         } catch {
-            // Deshacer solo lo nuestro (sin rollback global: no pisar cambios del usuario).
+            // Undo only our own changes (no global rollback: don't overwrite the user's changes).
             unlinkAllLabels(of: issue)
             context.delete(issue)
             createdLabels.forEach { context.delete($0) }
@@ -318,7 +318,7 @@ final class InboxImporter {
     private func update(_ p: UpdatePayload, in context: ModelContext) throws -> Outcome {
         let issue = try findIssue(code: p.code, in: context)
 
-        // Validar todo ANTES de mutar nada.
+        // Validate everything BEFORE mutating anything.
         let title = try p.title.map { raw -> String in
             let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !t.isEmpty else { throw ImportError.emptyTitle }
@@ -329,14 +329,14 @@ final class InboxImporter {
             guard !t.isEmpty else { throw ImportError.emptyProjectName }
             return t
         }
-        var newDueDate: Date??   // nil = sin cambios; .some(nil) = borrar
+        var newDueDate: Date??   // nil = unchanged; .some(nil) = clear
         switch p.dueDate {
         case .unchanged:      newDueDate = nil
         case .clear:          newDueDate = .some(nil)
         case .set(let s):     newDueDate = .some(try Self.parseLocalDate(s))
         }
 
-        // Estado previo, para deshacer solo lo nuestro si falla el save.
+        // Previous state, to undo only our own changes if the save fails.
         let old = (title: issue.title, details: issue.details, solution: issue.solution,
                    status: issue.status, priority: issue.priority, dueDate: issue.dueDate,
                    updatedAt: issue.updatedAt, project: issue.project, labels: issue.labels ?? [])
@@ -361,8 +361,8 @@ final class InboxImporter {
             if let pr = p.priority { issue.priority = pr }
             if let dd = newDueDate { issue.dueDate = dd }
 
-            // Mover de proyecto conserva el `code` (ver informe: los códigos
-            // no se renumeran, igual que al renombrar un proyecto en la UI).
+            // Moving to another project keeps the `code` (see report: codes
+            // are not renumbered, just like when renaming a project in the UI).
             if movedProject, let target = targetProject {
                 issue.project = target
                 if target.issues == nil { target.issues = [] }
@@ -370,9 +370,9 @@ final class InboxImporter {
                 old.project?.issues?.removeAll { $0.persistentModelID == issue.persistentModelID }
             }
 
-            // Labels: `labels` reemplaza el set completo. Si cambió el
-            // workspace y no vino `labels`, se re-resuelven por nombre en el
-            // workspace nuevo (los labels son por workspace).
+            // Labels: `labels` replaces the whole set. If the workspace
+            // changed and no `labels` came in, they are re-resolved by name in the
+            // new workspace (labels are per workspace).
             let labelNames: [String]?
             if let names = p.labels {
                 labelNames = names
@@ -389,7 +389,7 @@ final class InboxImporter {
                 link(labels, to: issue)
             }
 
-            issue.updatedAt = .now   // igual que IssueDetailView.save()
+            issue.updatedAt = .now   // same as IssueDetailView.save()
             try context.save()
         } catch {
             issue.title = old.title; issue.details = old.details; issue.solution = old.solution
@@ -413,9 +413,9 @@ final class InboxImporter {
 
     // MARK: - delete
 
-    /// Mismo camino que `IssueListView.deleteSelected()`: se sueltan las
-    /// referencias de los labels (deleteRule .nullify) y se borra la issue;
-    /// attachments y comments se borran por cascade.
+    /// Same path as `IssueListView.deleteSelected()`: the label
+    /// references are released (deleteRule .nullify) and the issue is deleted;
+    /// attachments and comments are deleted by cascade.
     private func delete(_ p: DeletePayload, in context: ModelContext) throws -> Outcome {
         let issue = try findIssue(code: p.code, in: context)
         willDeleteIssue?(issue)
@@ -425,10 +425,10 @@ final class InboxImporter {
         return .deleted
     }
 
-    // MARK: - Helpers de issues y labels
+    // MARK: - Issue and label helpers
 
-    /// Busca por `Issue.code` (trim, case-insensitive). Si hay más de una
-    /// (dos proyectos con el mismo prefijo de 3 letras) es ambiguo y falla.
+    /// Looks up by `Issue.code` (trim, case-insensitive). If there is more than one
+    /// (two projects with the same 3-letter prefix) it is ambiguous and fails.
     private func findIssue(code: String, in context: ModelContext) throws -> Issue {
         let wanted = Self.normalize(code)
         guard !wanted.isEmpty else { throw ImportError.emptyCode }
@@ -438,10 +438,10 @@ final class InboxImporter {
         return first
     }
 
-    /// Los labels son POR WORKSPACE (`Workspace.labels`; la UI solo ofrece los
-    /// del workspace del proyecto). Se matchea por nombre (trim, case-insensitive,
-    /// gana el más viejo); los que faltan se crean como `NewLabelSheet.create()`
-    /// (primer color de la paleta). Nombres vacíos se ignoran, duplicados se colapsan.
+    /// Labels are PER WORKSPACE (`Workspace.labels`; the UI only offers those
+    /// of the project's workspace). They are matched by name (trim, case-insensitive,
+    /// the oldest wins); missing ones are created like `NewLabelSheet.create()`
+    /// (first color of the palette). Empty names are ignored, duplicates are collapsed.
     private func resolveLabels(named names: [String], in workspace: Workspace, context: ModelContext)
         -> (all: [Orbit.Label], created: [Orbit.Label]) {
         var all: [Orbit.Label] = []
@@ -467,7 +467,7 @@ final class InboxImporter {
         return (all, created)
     }
 
-    /// Ambos lados de la relación, como `IssueLabelsValue.toggle`.
+    /// Both sides of the relationship, like `IssueLabelsValue.toggle`.
     private func link(_ labels: [Orbit.Label], to issue: Issue) {
         for label in labels {
             if issue.labels == nil { issue.labels = [] }
@@ -484,9 +484,9 @@ final class InboxImporter {
         issue.labels = []
     }
 
-    /// Busca un proyecto por nombre (trim + case-insensitive, en todos los
-    /// workspaces; gana el más viejo). Si no existe, lo crea igual que
-    /// `SidebarView.addProject(to:)`, en el primer workspace (por createdAt).
+    /// Looks up a project by name (trim + case-insensitive, across all
+    /// workspaces; the oldest wins). If it doesn't exist, creates it just like
+    /// `SidebarView.addProject(to:)`, in the first workspace (by createdAt).
     private func resolveProject(named name: String, in context: ModelContext) throws -> (Project, created: Bool) {
         let projects = try context.fetch(FetchDescriptor<Project>(sortBy: [SortDescriptor(\.createdAt)]))
         let wanted = Self.normalize(name)
@@ -509,7 +509,7 @@ final class InboxImporter {
         s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
-    /// "YYYY-MM-DD" → inicio de ese día en el calendario local.
+    /// "YYYY-MM-DD" → start of that day in the local calendar.
     static func parseLocalDate(_ string: String) throws -> Date {
         let parts = string.split(separator: "-", omittingEmptySubsequences: false)
         guard parts.count == 3,
@@ -535,8 +535,8 @@ final class InboxImporter {
             }
             try fm.moveItem(at: file, to: dest)
         } catch {
-            // El archivo queda en el Inbox (no se borra); se va a reintentar.
-            Self.logger.error("No se pudo mover a Failed/: \(file.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
+            // The file stays in the Inbox (it isn't deleted); it will be retried.
+            Self.logger.error("Could not move to Failed/: \(file.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 }
